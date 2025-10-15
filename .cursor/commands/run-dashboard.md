@@ -1,0 +1,1 @@
+run "make run-dashboard", once complete curl the "/health" endpoint to make sure it functions properly

@@ -1,0 +1,13 @@
+components:
+  - name: TestComponent
+    description: A test component
+    ship_team: TestTeam
+    slack_channel: "#test-channel"
+    sub_components:
+      - name: SubTest
+        description: A test subcomponent
+        managed: true
+        requires_confirmation: false
+    owners:
+      - rover_group: test-group
+
