@@ -84,6 +84,18 @@ func (h *Handlers) GetComponents(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, h.config.Components)
 }
 
+// GetComponentInfo returns the information for a specific component.
+func (h *Handlers) GetComponentInfo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentName := vars["componentName"]
+	component := h.getComponent(componentName)
+	if component == nil {
+		respondWithError(w, http.StatusNotFound, "Component not found")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, component)
+}
+
 // GetOutages retrieves outages for a specific component, aggregating sub-component outages for top-level components.
 func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -416,8 +428,6 @@ func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request)
 		Status:        status,
 		ActiveOutages: outages,
 	}
-
-	logger.WithField("status", status).Info("Successfully retrieved subcomponent status")
 	respondWithJSON(w, http.StatusOK, response)
 }
 
@@ -439,12 +449,6 @@ func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to get component status")
 		return
 	}
-
-	logger = logger.WithFields(logrus.Fields{
-		"status":               response.Status,
-		"active_outages_count": len(response.ActiveOutages),
-	})
-	logger.Info("Successfully retrieved component status")
 	respondWithJSON(w, http.StatusOK, response)
 }
 
@@ -464,8 +468,6 @@ func (h *Handlers) GetAllComponentsStatus(w http.ResponseWriter, r *http.Request
 
 		allComponentStatuses = append(allComponentStatuses, componentStatus)
 	}
-
-	logger.WithField("components_count", len(allComponentStatuses)).Info("Successfully retrieved all components status")
 	respondWithJSON(w, http.StatusOK, allComponentStatuses)
 }
 

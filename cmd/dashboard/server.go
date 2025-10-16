@@ -40,6 +40,7 @@ func (s *Server) setupRoutes() http.Handler {
 	router.HandleFunc("/api/status/{componentName}/{subComponentName}", s.handlers.GetSubComponentStatus).Methods("GET")
 
 	router.HandleFunc("/api/components", s.handlers.GetComponents).Methods("GET")
+	router.HandleFunc("/api/components/{componentName}", s.handlers.GetComponentInfo).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.GetOutage).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.UpdateOutage).Methods("PATCH")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.DeleteOutage).Methods("DELETE")

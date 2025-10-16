@@ -30,6 +30,7 @@ func TestE2E_Dashboard(t *testing.T) {
 
 	t.Run("Health", testHealth(serverURL))
 	t.Run("Components", testComponents(serverURL))
+	t.Run("ComponentInfo", testComponentInfo(serverURL))
 	t.Run("Outages", testOutages(serverURL))
 	t.Run("UpdateOutage", testUpdateOutage(serverURL))
 	t.Run("DeleteOutage", testDeleteOutage(serverURL))
@@ -80,6 +81,39 @@ func testComponents(serverURL string) func(*testing.T) {
 		assert.Len(t, components[0].Subcomponents, 2)
 		assert.Equal(t, "Tide", components[0].Subcomponents[0].Name)
 		assert.Equal(t, "Deck", components[0].Subcomponents[1].Name)
+	}
+}
+
+func testComponentInfo(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("GET component info for existing component returns component details", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/Prow")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+			var component types.Component
+			err = json.NewDecoder(resp.Body).Decode(&component)
+			require.NoError(t, err)
+
+			assert.Equal(t, "Prow", component.Name)
+			assert.Equal(t, "Backbone of the CI system", component.Description)
+			assert.Equal(t, "TestPlatform", component.ShipTeam)
+			assert.Equal(t, "#test-channel", component.SlackChannel)
+			assert.Len(t, component.Subcomponents, 2)
+			assert.Equal(t, "Tide", component.Subcomponents[0].Name)
+			assert.Equal(t, "Deck", component.Subcomponents[1].Name)
+		})
+
+		t.Run("GET component info for non-existent component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/NonExistentComponent")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
 	}
 }
 
