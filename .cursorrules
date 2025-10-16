@@ -68,7 +68,7 @@ This is a Go-based dashboard application for monitoring component status, availa
 - Use `logrus` as the structured logger
 - Set appropriate log levels (Debug, Info, Warn, Error, Fatal)
 - Include context in log messages (component names, IDs, etc.)
-- Use `log.WithFields()` for structured logging
+- Use `log.WithFields()` for structured logging ALWAYS use the same instance where possible, DO NOT redifine fields all over a single method
 
 ## Data Models
 

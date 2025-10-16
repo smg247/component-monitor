@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"ship-status-dash/pkg/types"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -59,8 +60,8 @@ func (h *Handlers) componentExists(componentName string) bool {
 }
 
 func (h *Handlers) isTopLevelComponent(componentName string) bool {
-	component, _ := h.findComponent(componentName)
-	return component != nil
+	component, subComponent := h.findComponent(componentName)
+	return component != nil && subComponent == nil
 }
 
 func (h *Handlers) getSubComponentNames(topLevelComponentName string) []string {
@@ -111,6 +112,8 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 
+	logger := h.logger.WithField("component", componentName)
+
 	if !h.componentExists(componentName) {
 		respondWithError(w, http.StatusNotFound, "Component not found")
 		return
@@ -131,10 +134,7 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.db.Where("component_name IN ?", componentNames).Order("start_time DESC").Find(&outages).Error; err != nil {
-		h.logger.WithFields(logrus.Fields{
-			"component": componentName,
-			"error":     err,
-		}).Error("Failed to query outages from database")
+		logger.WithField("error", err).Error("Failed to query outages from database")
 		respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
 		return
 	}
@@ -186,4 +186,101 @@ func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 	logger.Infof("Successfully created outage: %d", outage.ID)
 
 	respondWithJSON(w, http.StatusCreated, outage)
+}
+
+// UpdateOutageRequest represents the fields that can be updated in a PATCH request.
+type UpdateOutageRequest struct {
+	Severity    *string    `json:"severity,omitempty"`
+	StartTime   *time.Time `json:"start_time,omitempty"`
+	EndTime     *time.Time `json:"end_time,omitempty"`
+	Description *string    `json:"description,omitempty"`
+	ResolvedBy  *string    `json:"resolved_by,omitempty"`
+	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
+	TriageNotes *string    `json:"triage_notes,omitempty"`
+}
+
+// UpdateOutage updates an existing outage with the provided fields.
+func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentName := vars["componentName"]
+	outageIDStr := vars["outageId"]
+
+	outageID, err := strconv.ParseUint(outageIDStr, 10, 32)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid outage ID")
+		return
+	}
+
+	logger := h.logger.WithFields(logrus.Fields{
+		"outage_id": outageID,
+		"component": componentName,
+	})
+	logger.Info("Updating outage")
+
+	if !h.componentExists(componentName) {
+		respondWithError(w, http.StatusNotFound, "Component not found")
+		return
+	}
+
+	var outage types.Outage
+	if err := h.db.Where("id = ? AND component_name = ?", uint(outageID), componentName).First(&outage).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			respondWithError(w, http.StatusNotFound, "Outage not found")
+			return
+		}
+		logger.WithField("error", err).Error("Failed to query outage from database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get outage")
+		return
+	}
+
+	var updateReq UpdateOutageRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	updates := make(map[string]interface{})
+
+	if updateReq.Severity != nil {
+		updates["severity"] = *updateReq.Severity
+	}
+	if updateReq.StartTime != nil {
+		updates["start_time"] = *updateReq.StartTime
+	}
+	if updateReq.EndTime != nil {
+		updates["end_time"] = *updateReq.EndTime
+	}
+	if updateReq.Description != nil {
+		updates["description"] = *updateReq.Description
+	}
+	if updateReq.ResolvedBy != nil {
+		updates["resolved_by"] = *updateReq.ResolvedBy
+	}
+	if updateReq.ConfirmedAt != nil {
+		updates["confirmed_at"] = *updateReq.ConfirmedAt
+	}
+	if updateReq.TriageNotes != nil {
+		updates["triage_notes"] = *updateReq.TriageNotes
+	}
+
+	if len(updates) == 0 {
+		respondWithJSON(w, http.StatusOK, outage)
+		return
+	}
+
+	if err := h.db.Model(&outage).Updates(updates).Error; err != nil {
+		logger.WithField("error", err).Error("Failed to update outage in database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to update outage")
+		return
+	}
+
+	if err := h.db.Where("id = ?", uint(outageID)).First(&outage).Error; err != nil {
+		logger.WithField("error", err).Error("Failed to fetch updated outage from database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get updated outage")
+		return
+	}
+
+	logger.Info("Successfully updated outage")
+
+	respondWithJSON(w, http.StatusOK, outage)
 }

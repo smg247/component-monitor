@@ -10,6 +10,10 @@ DB_NAME="ship_status_test"
 
 cleanup() {
   echo "Cleaning up dashboard processes..."
+  if [ ! -z "$DASHBOARD_PID" ]; then
+    kill $DASHBOARD_PID 2>/dev/null || true
+    wait $DASHBOARD_PID 2>/dev/null || true
+  fi
   pkill -f "go run.*cmd/dashboard" 2>/dev/null || true
   sleep 1
   
@@ -53,13 +57,71 @@ podman exec $CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;"
 DSN="postgres://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?sslmode=disable&client_encoding=UTF8"
 export TEST_DATABASE_DSN="$DSN"
 
-echo "Running e2e tests..."
+echo "Running migration..."
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
+go run ./cmd/migrate --dsn "$DSN"
+
+echo "Finding available port..."
+DASHBOARD_PORT=""
+for port in {8080..8099}; do
+  if ! lsof -i :$port > /dev/null 2>&1; then
+    DASHBOARD_PORT=$port
+    break
+  fi
+done
+
+if [ -z "$DASHBOARD_PORT" ]; then
+  echo "No available port found in range 8080-8099"
+  exit 1
+fi
+
+echo "Using port $DASHBOARD_PORT for dashboard server"
+
+echo "Starting dashboard server..."
+DASHBOARD_PID=""
+DASHBOARD_LOG="/tmp/dashboard-server.log"
+DASHBOARD_ERROR_LOG="/tmp/dashboard-server-errors.log"
+
+# Start dashboard server in background
+go run ./cmd/dashboard --config test/e2e/config.yaml --port $DASHBOARD_PORT --dsn "$DSN" > "$DASHBOARD_LOG" 2> "$DASHBOARD_ERROR_LOG" &
+DASHBOARD_PID=$!
+
+# Wait for server to be ready
+echo "Waiting for dashboard server to be ready..."
+for i in {1..30}; do
+  if curl -s http://localhost:$DASHBOARD_PORT/health > /dev/null 2>&1; then
+    echo "Dashboard server is ready on port $DASHBOARD_PORT"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo "Dashboard server failed to start"
+    echo "=== Server Output Log ==="
+    cat "$DASHBOARD_LOG" 2>/dev/null || echo "No output log found"
+    echo "=== Server Error Log ==="
+    cat "$DASHBOARD_ERROR_LOG" 2>/dev/null || echo "No error log found"
+    kill $DASHBOARD_PID 2>/dev/null || true
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "Running e2e tests..."
 cd "$PROJECT_ROOT/test/e2e"
+export TEST_SERVER_PORT="$DASHBOARD_PORT"
 set +e
 gotestsum --format testname -- -timeout 30s .
 TEST_EXIT_CODE=$?
 set -e
+
+echo "Stopping dashboard server..."
+kill $DASHBOARD_PID 2>/dev/null || true
+wait $DASHBOARD_PID 2>/dev/null || true
+
+echo "=== Server Output Log ==="
+cat "$DASHBOARD_LOG" 2>/dev/null || echo "No output log found"
+echo "=== Server Error Log ==="
+cat "$DASHBOARD_ERROR_LOG" 2>/dev/null || echo "No error log found"
 
 echo ""
 if [ $TEST_EXIT_CODE -eq 0 ]; then

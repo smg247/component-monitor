@@ -2,12 +2,11 @@ package e2e
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"ship-status-dash/pkg/types"
 	"testing"
 	"time"
@@ -21,50 +20,18 @@ func TestE2E_Dashboard(t *testing.T) {
 		t.Skip("Skipping e2e test in short mode")
 	}
 
-	connStr := os.Getenv("TEST_DATABASE_DSN")
-	if connStr == "" {
-		t.Fatal("TEST_DATABASE_DSN environment variable is required")
+	// Get server port from environment variable
+	serverPort := os.Getenv("TEST_SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8888" // fallback to default
 	}
 
-	t.Logf("Using PostgreSQL at: %s", connStr)
-
-	// Run migration
-	t.Log("Running migration...")
-	migrateCmd := exec.Command("go", "run", "../../cmd/migrate", "--dsn", connStr)
-	migrateOutput, err := migrateCmd.CombinedOutput()
-	require.NoError(t, err, "Migration failed: %s", string(migrateOutput))
-	t.Logf("Migration output: %s", string(migrateOutput))
-
-	// Get path to test config file
-	configPath, err := filepath.Abs("config.yaml")
-	require.NoError(t, err)
-	t.Logf("Using test config at: %s", configPath)
-
-	// Start dashboard server
-	t.Log("Starting dashboard server...")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dashboardCmd := exec.CommandContext(ctx, "go", "run", "../../cmd/dashboard", "--config", configPath, "--port", "8888", "--dsn", connStr)
-	err = dashboardCmd.Start()
-	require.NoError(t, err)
-
-	// Wait for server to be ready
-	serverURL := "http://localhost:8888"
-	require.Eventually(t, func() bool {
-		resp, err := http.Get(serverURL + "/health")
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusOK
-	}, 10*time.Second, 500*time.Millisecond, "Server failed to start")
-
-	t.Log("Dashboard server is ready")
+	serverURL := "http://localhost:" + serverPort
 
 	t.Run("Health", testHealth(serverURL))
 	t.Run("Components", testComponents(serverURL))
 	t.Run("Outages", testOutages(serverURL))
+	t.Run("UpdateOutage", testUpdateOutage(serverURL))
 
 	t.Log("All tests passed!")
 }
@@ -186,5 +153,105 @@ func testOutages(serverURL string) func(*testing.T) {
 			assert.Len(t, outages, 1)
 			assert.Equal(t, "SubTest", outages[0].ComponentName)
 		})
+	}
+}
+
+func testUpdateOutage(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		// First create an outage to update
+		outagePayload := map[string]interface{}{
+			"severity":        "Down",
+			"start_time":      time.Now().UTC().Format(time.RFC3339),
+			"description":     "Test outage for update",
+			"discovered_from": "e2e-test",
+			"created_by":      "test-user",
+		}
+
+		payloadBytes, err := json.Marshal(outagePayload)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("POST", serverURL+"/api/components/SubTest/outages",
+			bytes.NewBuffer(payloadBytes))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var createdOutage types.Outage
+		err = json.NewDecoder(resp.Body).Decode(&createdOutage)
+		require.NoError(t, err)
+
+		// Now update the outage
+		updatePayload := map[string]interface{}{
+			"severity":     "Degraded",
+			"description":  "Updated description",
+			"resolved_by":  "test-resolver",
+			"triage_notes": "Updated triage notes",
+		}
+
+		updateBytes, err := json.Marshal(updatePayload)
+		require.NoError(t, err)
+
+		updateURL := serverURL + "/api/components/SubTest/outages/" + fmt.Sprintf("%d", createdOutage.ID)
+		t.Logf("Making PATCH request to: %s", updateURL)
+
+		updateReq, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(updateBytes))
+		require.NoError(t, err)
+		updateReq.Header.Set("Content-Type", "application/json")
+
+		updateResp, err := client.Do(updateReq)
+		require.NoError(t, err)
+		defer updateResp.Body.Close()
+
+		if updateResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(updateResp.Body)
+			t.Logf("Unexpected status %d, body: %s", updateResp.StatusCode, string(body))
+		}
+
+		assert.Equal(t, http.StatusOK, updateResp.StatusCode)
+		assert.Equal(t, "application/json", updateResp.Header.Get("Content-Type"))
+
+		var updatedOutage types.Outage
+		err = json.NewDecoder(updateResp.Body).Decode(&updatedOutage)
+		require.NoError(t, err)
+
+		assert.Equal(t, createdOutage.ID, updatedOutage.ID)
+		assert.Equal(t, "Degraded", updatedOutage.Severity)
+		assert.Equal(t, "Updated description", updatedOutage.Description)
+		assert.Equal(t, "test-resolver", *updatedOutage.ResolvedBy)
+		assert.Equal(t, "Updated triage notes", *updatedOutage.TriageNotes)
+		assert.WithinDuration(t, createdOutage.StartTime.UTC(), updatedOutage.StartTime.UTC(), time.Second) // Should remain unchanged
+		assert.Equal(t, createdOutage.CreatedBy, updatedOutage.CreatedBy)                                   // Should remain unchanged
+
+		// Test updating non-existent outage
+		nonExistentReq, err := http.NewRequest("PATCH",
+			serverURL+"/api/components/SubTest/outages/99999",
+			bytes.NewBuffer(updateBytes))
+		require.NoError(t, err)
+		nonExistentReq.Header.Set("Content-Type", "application/json")
+
+		nonExistentResp, err := client.Do(nonExistentReq)
+		require.NoError(t, err)
+		defer nonExistentResp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, nonExistentResp.StatusCode)
+
+		// Test updating with invalid component
+		invalidComponentReq, err := http.NewRequest("PATCH",
+			serverURL+"/api/components/NonExistentComponent/outages/"+fmt.Sprintf("%d", createdOutage.ID),
+			bytes.NewBuffer(updateBytes))
+		require.NoError(t, err)
+		invalidComponentReq.Header.Set("Content-Type", "application/json")
+
+		invalidComponentResp, err := client.Do(invalidComponentReq)
+		require.NoError(t, err)
+		defer invalidComponentResp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, invalidComponentResp.StatusCode)
 	}
 }
