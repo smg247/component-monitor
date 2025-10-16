@@ -407,17 +407,7 @@ func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request)
 
 	status := types.StatusHealthy
 	if len(outages) > 0 {
-		mostCriticalSeverity := outages[0].Severity
-		highestLevel := types.GetSeverityLevel(mostCriticalSeverity)
-
-		for _, outage := range outages {
-			level := types.GetSeverityLevel(outage.Severity)
-			if level > highestLevel {
-				highestLevel = level
-				mostCriticalSeverity = outage.Severity
-			}
-		}
-		status = mostCriticalSeverity.ToStatus()
+		status = determineStatusFromSeverity(outages)
 	}
 
 	response := types.ComponentStatus{
@@ -427,4 +417,70 @@ func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request)
 
 	logger.WithField("status", status).Info("Successfully retrieved subcomponent status")
 	respondWithJSON(w, http.StatusOK, response)
+}
+
+// GetComponentStatus returns the status of a component based on active outages in all its sub-components
+func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentName := vars["componentName"]
+
+	logger := h.logger.WithField("component", componentName)
+
+	component := h.getComponent(componentName)
+	if component == nil {
+		respondWithError(w, http.StatusNotFound, "Component not found")
+		return
+	}
+
+	subComponents := make([]string, len(component.Subcomponents))
+	for i, subComponent := range component.Subcomponents {
+		subComponents[i] = subComponent.Name
+	}
+
+	var outages []types.Outage
+	if err := h.db.Where("component_name IN ? AND (end_time IS NULL OR end_time > ?)", subComponents, time.Now()).Order("start_time DESC").Find(&outages).Error; err != nil {
+		logger.WithField("error", err).Error("Failed to query active outages from database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get component status")
+		return
+	}
+
+	subComponentsWithOutages := make(map[string]bool)
+	for _, outage := range outages {
+		subComponentsWithOutages[outage.ComponentName] = true
+	}
+
+	var status types.Status
+	if len(outages) == 0 {
+		status = types.StatusHealthy
+	} else if len(subComponentsWithOutages) < len(subComponents) {
+		status = types.StatusPartial
+	} else {
+		status = determineStatusFromSeverity(outages)
+	}
+
+	response := types.ComponentStatus{
+		Status:        status,
+		ActiveOutages: outages,
+	}
+
+	logger = logger.WithFields(logrus.Fields{
+		"status":               status,
+		"active_outages_count": len(outages),
+	})
+	logger.Info("Successfully retrieved component status")
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+func determineStatusFromSeverity(outages []types.Outage) types.Status {
+	mostCriticalSeverity := outages[0].Severity
+	highestLevel := types.GetSeverityLevel(mostCriticalSeverity)
+
+	for _, outage := range outages {
+		level := types.GetSeverityLevel(outage.Severity)
+		if level > highestLevel {
+			highestLevel = level
+			mostCriticalSeverity = outage.Severity
+		}
+	}
+	return mostCriticalSeverity.ToStatus()
 }

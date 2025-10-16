@@ -35,6 +35,7 @@ func TestE2E_Dashboard(t *testing.T) {
 	t.Run("DeleteOutage", testDeleteOutage(serverURL))
 	t.Run("GetOutage", testGetOutage(serverURL))
 	t.Run("SubComponentStatus", testSubComponentStatus(serverURL))
+	t.Run("ComponentStatus", testComponentStatus(serverURL))
 
 	t.Log("All tests passed!")
 }
@@ -642,6 +643,106 @@ func testSubComponentStatus(serverURL string) func(*testing.T) {
 			assert.Equal(t, types.StatusDown, status.Status)
 			assert.Len(t, status.ActiveOutages, 1)
 			assert.Equal(t, outage.ID, status.ActiveOutages[0].ID)
+		})
+	}
+}
+
+func testComponentStatus(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("GET status for healthy component returns Healthy", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status/Prow")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusHealthy, status.Status)
+			assert.Empty(t, status.ActiveOutages)
+		})
+
+		t.Run("GET status for component with one degraded sub-component returns Partial", func(t *testing.T) {
+			// Create a degraded outage for Tide
+			tideOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDegraded))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status/Prow")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusPartial, status.Status)
+			assert.Len(t, status.ActiveOutages, 1)
+			assert.Equal(t, string(types.SeverityDegraded), string(status.ActiveOutages[0].Severity))
+		})
+
+		t.Run("GET status for component with all sub-components down returns Down", func(t *testing.T) {
+			// Create Down outages for both sub-components
+			tideOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDown))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+			deckOutage := createOutageWithSeverity(t, serverURL, "Prow", "Deck", string(types.SeverityDown))
+			defer deleteOutage(t, serverURL, "Prow", "Deck", deckOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status/Prow")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusDown, status.Status)
+			assert.Len(t, status.ActiveOutages, 2)
+			for _, outage := range status.ActiveOutages {
+				assert.Equal(t, string(types.SeverityDown), string(outage.Severity))
+			}
+		})
+
+		t.Run("GET status for component with mixed severity outages returns most severe", func(t *testing.T) {
+			// Create outages with different severities
+			tideOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDown))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+			deckOutage := createOutageWithSeverity(t, serverURL, "Prow", "Deck", string(types.SeverityDegraded))
+			defer deleteOutage(t, serverURL, "Prow", "Deck", deckOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status/Prow")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusDown, status.Status)
+			assert.Len(t, status.ActiveOutages, 2)
+			// Verify we have both severities present
+			severities := make(map[string]bool)
+			for _, outage := range status.ActiveOutages {
+				severities[string(outage.Severity)] = true
+			}
+			assert.True(t, severities[string(types.SeverityDown)])
+			assert.True(t, severities[string(types.SeverityDegraded)])
+		})
+
+		t.Run("GET status for non-existent component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status/NonExistent")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 	}
 }
