@@ -34,6 +34,9 @@ func (s *Server) setupRoutes() http.Handler {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/health", s.handlers.Health).Methods("GET")
+
+	router.HandleFunc("/api/status/{componentName}/{subComponentName}", s.handlers.GetSubComponentStatus).Methods("GET")
+
 	router.HandleFunc("/api/components", s.handlers.GetComponents).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.GetOutage).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.UpdateOutage).Methods("PATCH")

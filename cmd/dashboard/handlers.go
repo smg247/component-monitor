@@ -54,6 +54,9 @@ func (h *Handlers) validateOutage(outage *types.Outage) (string, bool) {
 	if outage.Severity == "" {
 		return "Severity is required", false
 	}
+	if !types.IsValidSeverity(string(outage.Severity)) {
+		return "Invalid severity. Must be one of: Down, Degraded, Suspected", false
+	}
 	if outage.StartTime.IsZero() {
 		return "StartTime is required", false
 	}
@@ -250,7 +253,11 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if updateReq.Severity != nil {
-		outage.Severity = *updateReq.Severity
+		if !types.IsValidSeverity(*updateReq.Severity) {
+			respondWithError(w, http.StatusBadRequest, "Invalid severity. Must be one of: Down, Degraded, Suspected")
+			return
+		}
+		outage.Severity = types.Severity(*updateReq.Severity)
 	}
 	if updateReq.StartTime != nil {
 		outage.StartTime = *updateReq.StartTime
@@ -366,4 +373,58 @@ func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Successfully deleted outage")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSubComponentStatus returns the status of a subcomponent based on active outages
+func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentName := vars["componentName"]
+	subComponentName := vars["subComponentName"]
+
+	logger := h.logger.WithFields(logrus.Fields{
+		"component":     componentName,
+		"sub_component": subComponentName,
+	})
+
+	component := h.getComponent(componentName)
+	if component == nil {
+		respondWithError(w, http.StatusNotFound, "Component not found")
+		return
+	}
+
+	subComponent := component.GetSubComponent(subComponentName)
+	if subComponent == nil {
+		respondWithError(w, http.StatusNotFound, "Sub-component not found")
+		return
+	}
+
+	var outages []types.Outage
+	if err := h.db.Where("component_name = ? AND (end_time IS NULL OR end_time > ?)", subComponentName, time.Now()).Order("start_time DESC").Find(&outages).Error; err != nil {
+		logger.WithField("error", err).Error("Failed to query active outages from database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get subcomponent status")
+		return
+	}
+
+	status := types.StatusHealthy
+	if len(outages) > 0 {
+		mostCriticalSeverity := outages[0].Severity
+		highestLevel := types.GetSeverityLevel(mostCriticalSeverity)
+
+		for _, outage := range outages {
+			level := types.GetSeverityLevel(outage.Severity)
+			if level > highestLevel {
+				highestLevel = level
+				mostCriticalSeverity = outage.Severity
+			}
+		}
+		status = mostCriticalSeverity.ToStatus()
+	}
+
+	response := types.ComponentStatus{
+		Status:        status,
+		ActiveOutages: outages,
+	}
+
+	logger.WithField("status", status).Info("Successfully retrieved subcomponent status")
+	respondWithJSON(w, http.StatusOK, response)
 }

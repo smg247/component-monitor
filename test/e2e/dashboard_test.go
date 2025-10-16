@@ -34,6 +34,7 @@ func TestE2E_Dashboard(t *testing.T) {
 	t.Run("UpdateOutage", testUpdateOutage(serverURL))
 	t.Run("DeleteOutage", testDeleteOutage(serverURL))
 	t.Run("GetOutage", testGetOutage(serverURL))
+	t.Run("SubComponentStatus", testSubComponentStatus(serverURL))
 
 	t.Log("All tests passed!")
 }
@@ -83,7 +84,7 @@ func testComponents(serverURL string) func(*testing.T) {
 // createOutage is a helper function to create an outage for testing
 func createOutage(t *testing.T, serverURL, componentName, subComponentName string) types.Outage {
 	outagePayload := map[string]interface{}{
-		"severity":        "Down",
+		"severity":        string(types.SeverityDown),
 		"start_time":      time.Now().UTC().Format(time.RFC3339),
 		"description":     "Test outage for " + subComponentName,
 		"discovered_from": "e2e-test",
@@ -129,7 +130,7 @@ func testOutages(serverURL string) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Run("POST to top-level component fails (old endpoint)", func(t *testing.T) {
 			outagePayload := map[string]interface{}{
-				"severity":        "Down",
+				"severity":        string(types.SeverityDown),
 				"start_time":      time.Now().UTC().Format(time.RFC3339),
 				"description":     "Test outage",
 				"discovered_from": "e2e-test",
@@ -158,13 +159,13 @@ func testOutages(serverURL string) func(*testing.T) {
 
 			assert.NotZero(t, outage.ID)
 			assert.Equal(t, "Tide", outage.ComponentName)
-			assert.Equal(t, "Down", outage.Severity)
+			assert.Equal(t, string(types.SeverityDown), string(outage.Severity))
 			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
 		})
 
 		t.Run("POST to non-existent sub-component fails", func(t *testing.T) {
 			outagePayload := map[string]interface{}{
-				"severity":        "Down",
+				"severity":        string(types.SeverityDown),
 				"start_time":      time.Now().UTC().Format(time.RFC3339),
 				"description":     "Test outage for non-existent sub-component",
 				"discovered_from": "e2e-test",
@@ -185,6 +186,36 @@ func testOutages(serverURL string) func(*testing.T) {
 			defer resp.Body.Close()
 
 			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("POST with invalid severity fails", func(t *testing.T) {
+			outagePayload := map[string]interface{}{
+				"severity":        "InvalidSeverity",
+				"start_time":      time.Now().UTC().Format(time.RFC3339),
+				"description":     "Test outage with invalid severity",
+				"discovered_from": "e2e-test",
+				"created_by":      "test-user",
+			}
+
+			payloadBytes, err := json.Marshal(outagePayload)
+			require.NoError(t, err)
+
+			req, err := http.NewRequest("POST", serverURL+"/api/components/Prow/Deck/outages",
+				bytes.NewBuffer(payloadBytes))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+			var errorResponse map[string]string
+			err = json.NewDecoder(resp.Body).Decode(&errorResponse)
+			require.NoError(t, err)
+			assert.Contains(t, errorResponse["error"], "Invalid severity")
 		})
 
 		t.Run("GET on top-level component aggregates sub-components", func(t *testing.T) {
@@ -272,7 +303,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 
 		// Now update the outage
 		updatePayload := map[string]interface{}{
-			"severity":     "Degraded",
+			"severity":     string(types.SeverityDegraded),
 			"description":  "Updated description",
 			"resolved_by":  "test-resolver",
 			"triage_notes": "Updated triage notes",
@@ -306,7 +337,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, createdOutage.ID, updatedOutage.ID)
-		assert.Equal(t, "Degraded", updatedOutage.Severity)
+		assert.Equal(t, string(types.SeverityDegraded), string(updatedOutage.Severity))
 		assert.Equal(t, "Updated description", updatedOutage.Description)
 		assert.Equal(t, "test-resolver", *updatedOutage.ResolvedBy)
 		assert.Equal(t, "Updated triage notes", *updatedOutage.TriageNotes)
@@ -338,6 +369,30 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		defer invalidComponentResp.Body.Close()
 
 		assert.Equal(t, http.StatusNotFound, invalidComponentResp.StatusCode)
+
+		// Test updating with invalid severity
+		invalidSeverityUpdate := map[string]interface{}{
+			"severity": "InvalidSeverity",
+		}
+		invalidSeverityBytes, err := json.Marshal(invalidSeverityUpdate)
+		require.NoError(t, err)
+
+		invalidSeverityReq, err := http.NewRequest("PATCH",
+			serverURL+"/api/components/Prow/Tide/outages/"+fmt.Sprintf("%d", createdOutage.ID),
+			bytes.NewBuffer(invalidSeverityBytes))
+		require.NoError(t, err)
+		invalidSeverityReq.Header.Set("Content-Type", "application/json")
+
+		invalidSeverityResp, err := client.Do(invalidSeverityReq)
+		require.NoError(t, err)
+		defer invalidSeverityResp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, invalidSeverityResp.StatusCode)
+
+		var errorResponse map[string]string
+		err = json.NewDecoder(invalidSeverityResp.Body).Decode(&errorResponse)
+		require.NoError(t, err)
+		assert.Contains(t, errorResponse["error"], "Invalid severity")
 	}
 }
 
@@ -426,7 +481,7 @@ func testGetOutage(serverURL string) func(*testing.T) {
 
 			assert.Equal(t, createdOutage.ID, outage.ID)
 			assert.Equal(t, "Tide", outage.ComponentName)
-			assert.Equal(t, "Down", outage.Severity)
+			assert.Equal(t, string(types.SeverityDown), string(outage.Severity))
 			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
 			assert.Equal(t, "test-user", outage.CreatedBy)
 		})
@@ -468,4 +523,156 @@ func testGetOutage(serverURL string) func(*testing.T) {
 			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 	}
+}
+
+func testSubComponentStatus(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("GET status for healthy sub-component returns Healthy", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status/Prow/Deck")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusHealthy, status.Status)
+			assert.Empty(t, status.ActiveOutages)
+		})
+
+		t.Run("GET status for sub-component with active outage returns outage severity", func(t *testing.T) {
+			// Create an outage for Deck
+			outage := createOutage(t, serverURL, "Prow", "Deck")
+			defer deleteOutage(t, serverURL, "Prow", "Deck", outage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status/Prow/Deck")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusDown, status.Status)
+			assert.Len(t, status.ActiveOutages, 1)
+			assert.Equal(t, string(types.SeverityDown), string(status.ActiveOutages[0].Severity))
+		})
+
+		t.Run("GET status for sub-component with multiple outages returns most critical", func(t *testing.T) {
+			// Create a Degraded outage for Tide
+			degradedOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDegraded))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", degradedOutage.ID)
+
+			// Create a Down outage for Tide
+			downOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDown))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", downOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status/Prow/Tide")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusDown, status.Status)
+			assert.Len(t, status.ActiveOutages, 2)
+		})
+
+		t.Run("GET status for non-existent component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status/NonExistent/Deck")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("GET status for non-existent sub-component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status/Prow/NonExistent")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("GET status for sub-component with future end_time still considers outage active", func(t *testing.T) {
+			// Create an outage first
+			outage := createOutage(t, serverURL, "Prow", "Deck")
+			defer deleteOutage(t, serverURL, "Prow", "Deck", outage.ID)
+
+			// Update the outage to have a future end_time
+			futureTime := time.Now().Add(24 * time.Hour) // 24 hours in the future
+			updatePayload := map[string]interface{}{
+				"end_time": futureTime.UTC().Format(time.RFC3339),
+			}
+
+			updateBytes, err := json.Marshal(updatePayload)
+			require.NoError(t, err)
+
+			updateReq, err := http.NewRequest("PATCH", serverURL+"/api/components/Prow/Deck/outages/"+fmt.Sprintf("%d", outage.ID),
+				bytes.NewBuffer(updateBytes))
+			require.NoError(t, err)
+			updateReq.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{}
+			updateResp, err := client.Do(updateReq)
+			require.NoError(t, err)
+			defer updateResp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, updateResp.StatusCode)
+
+			// Check that the status endpoint still considers this outage active
+			statusResp, err := http.Get(serverURL + "/api/status/Prow/Deck")
+			require.NoError(t, err)
+			defer statusResp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, statusResp.StatusCode)
+
+			var status types.ComponentStatus
+			err = json.NewDecoder(statusResp.Body).Decode(&status)
+			require.NoError(t, err)
+
+			assert.Equal(t, types.StatusDown, status.Status)
+			assert.Len(t, status.ActiveOutages, 1)
+			assert.Equal(t, outage.ID, status.ActiveOutages[0].ID)
+		})
+	}
+}
+
+func createOutageWithSeverity(t *testing.T, serverURL, componentName, subComponentName, severity string) types.Outage {
+	outagePayload := map[string]interface{}{
+		"severity":        severity,
+		"start_time":      time.Now().UTC().Format(time.RFC3339),
+		"description":     "Test outage with " + severity + " severity",
+		"discovered_from": "e2e-test",
+		"created_by":      "test-user",
+	}
+
+	payloadBytes, err := json.Marshal(outagePayload)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", serverURL+"/api/components/"+componentName+"/"+subComponentName+"/outages",
+		bytes.NewBuffer(payloadBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var outage types.Outage
+	err = json.NewDecoder(resp.Body).Decode(&outage)
+	require.NoError(t, err)
+
+	return outage
 }

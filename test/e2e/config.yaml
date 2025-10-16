@@ -13,5 +13,5 @@ components:
         managed: true
         requires_confirmation: false
     owners:
-      - rover_group: test-group
+      - rover_group: dptp
 

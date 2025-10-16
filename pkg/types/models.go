@@ -7,11 +7,56 @@ import (
 	"gorm.io/gorm"
 )
 
+type Severity string
+
+const (
+	SeverityDown      Severity = "Down"
+	SeverityDegraded  Severity = "Degraded"
+	SeveritySuspected Severity = "Suspected"
+)
+
+func (s Severity) ToStatus() Status {
+	switch s {
+	case SeverityDown:
+		return StatusDown
+	case SeverityDegraded:
+		return StatusDegraded
+	case SeveritySuspected:
+		return StatusSuspected
+	default:
+		return Status("Invalid")
+	}
+}
+
+// IsValidSeverity checks if the provided severity string is a valid severity level
+func IsValidSeverity(severity string) bool {
+	switch Severity(severity) {
+	case SeverityDown, SeverityDegraded, SeveritySuspected:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSeverityLevel returns a numeric value for severity comparison (higher = more critical)
+func GetSeverityLevel(severity Severity) int {
+	switch severity {
+	case SeverityDown:
+		return 3
+	case SeverityDegraded:
+		return 2
+	case SeveritySuspected:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // Outage represents a component outage with tracking information for incident management.
 type Outage struct {
 	gorm.Model
 	ComponentName  string       `json:"component_name" gorm:"column:component_name;not null;index"`
-	Severity       string       `json:"severity" gorm:"column:severity;not null"`
+	Severity       Severity     `json:"severity" gorm:"column:severity;not null"`
 	StartTime      time.Time    `json:"start_time" gorm:"column:start_time;not null;index"`
 	EndTime        sql.NullTime `json:"end_time" gorm:"column:end_time;index"`
 	AutoResolve    bool         `json:"auto_resolve" gorm:"column:auto_resolve;not null;default:true"`
