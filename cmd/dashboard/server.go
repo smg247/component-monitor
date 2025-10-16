@@ -35,6 +35,7 @@ func (s *Server) setupRoutes() http.Handler {
 
 	router.HandleFunc("/health", s.handlers.Health).Methods("GET")
 
+	router.HandleFunc("/api/status", s.handlers.GetAllComponentsStatus).Methods("GET")
 	router.HandleFunc("/api/status/{componentName}", s.handlers.GetComponentStatus).Methods("GET")
 	router.HandleFunc("/api/status/{componentName}/{subComponentName}", s.handlers.GetSubComponentStatus).Methods("GET")
 

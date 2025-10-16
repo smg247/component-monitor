@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"ship-status-dash/pkg/types"
 	"strconv"
@@ -411,6 +412,7 @@ func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	response := types.ComponentStatus{
+		ComponentName: fmt.Sprintf("%s/%s", componentName, subComponentName),
 		Status:        status,
 		ActiveOutages: outages,
 	}
@@ -432,6 +434,43 @@ func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	response, err := h.getComponentStatus(component, logger)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get component status")
+		return
+	}
+
+	logger = logger.WithFields(logrus.Fields{
+		"status":               response.Status,
+		"active_outages_count": len(response.ActiveOutages),
+	})
+	logger.Info("Successfully retrieved component status")
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+// GetAllComponentsStatus returns the status of all components
+func (h *Handlers) GetAllComponentsStatus(w http.ResponseWriter, r *http.Request) {
+	logger := h.logger
+
+	var allComponentStatuses []types.ComponentStatus
+
+	for _, component := range h.config.Components {
+		componentLogger := logger.WithField("component", component.Name)
+		componentStatus, err := h.getComponentStatus(&component, componentLogger)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to get component status")
+			return
+		}
+
+		allComponentStatuses = append(allComponentStatuses, componentStatus)
+	}
+
+	logger.WithField("components_count", len(allComponentStatuses)).Info("Successfully retrieved all components status")
+	respondWithJSON(w, http.StatusOK, allComponentStatuses)
+}
+
+// getComponentStatus calculates the status of a component based on its sub-components and active outages
+func (h *Handlers) getComponentStatus(component *types.Component, logger *logrus.Entry) (types.ComponentStatus, error) {
 	subComponents := make([]string, len(component.Subcomponents))
 	for i, subComponent := range component.Subcomponents {
 		subComponents[i] = subComponent.Name
@@ -440,8 +479,7 @@ func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
 	var outages []types.Outage
 	if err := h.db.Where("component_name IN ? AND (end_time IS NULL OR end_time > ?)", subComponents, time.Now()).Order("start_time DESC").Find(&outages).Error; err != nil {
 		logger.WithField("error", err).Error("Failed to query active outages from database")
-		respondWithError(w, http.StatusInternalServerError, "Failed to get component status")
-		return
+		return types.ComponentStatus{}, err
 	}
 
 	subComponentsWithOutages := make(map[string]bool)
@@ -458,17 +496,11 @@ func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
 		status = determineStatusFromSeverity(outages)
 	}
 
-	response := types.ComponentStatus{
+	return types.ComponentStatus{
+		ComponentName: component.Name,
 		Status:        status,
 		ActiveOutages: outages,
-	}
-
-	logger = logger.WithFields(logrus.Fields{
-		"status":               status,
-		"active_outages_count": len(outages),
-	})
-	logger.Info("Successfully retrieved component status")
-	respondWithJSON(w, http.StatusOK, response)
+	}, nil
 }
 
 func determineStatusFromSeverity(outages []types.Outage) types.Status {

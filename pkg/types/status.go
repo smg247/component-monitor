@@ -11,6 +11,7 @@ const (
 )
 
 type ComponentStatus struct {
+	ComponentName string   `json:"component_name"`
 	Status        Status   `json:"status"`
 	ActiveOutages []Outage `json:"active_outages"`
 }

@@ -36,6 +36,7 @@ func TestE2E_Dashboard(t *testing.T) {
 	t.Run("GetOutage", testGetOutage(serverURL))
 	t.Run("SubComponentStatus", testSubComponentStatus(serverURL))
 	t.Run("ComponentStatus", testComponentStatus(serverURL))
+	t.Run("AllComponentsStatus", testAllComponentsStatus(serverURL))
 
 	t.Log("All tests passed!")
 }
@@ -776,4 +777,81 @@ func createOutageWithSeverity(t *testing.T, serverURL, componentName, subCompone
 	require.NoError(t, err)
 
 	return outage
+}
+func testAllComponentsStatus(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("GET status for all components returns all components with their status", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/status")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+			var allStatuses []types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&allStatuses)
+			require.NoError(t, err)
+
+			// Should have exactly 1 component (Prow) based on test config
+			assert.Len(t, allStatuses, 1)
+			assert.Equal(t, "Prow", allStatuses[0].ComponentName)
+			assert.Equal(t, types.StatusHealthy, allStatuses[0].Status)
+			assert.Empty(t, allStatuses[0].ActiveOutages)
+		})
+
+		t.Run("GET status for all components with outages shows correct statuses", func(t *testing.T) {
+			// Create outages for different sub-components
+			tideOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDegraded))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+			deckOutage := createOutageWithSeverity(t, serverURL, "Prow", "Deck", string(types.SeverityDown))
+			defer deleteOutage(t, serverURL, "Prow", "Deck", deckOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var allStatuses []types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&allStatuses)
+			require.NoError(t, err)
+
+			// Should have exactly 1 component (Prow)
+			assert.Len(t, allStatuses, 1)
+			assert.Equal(t, "Prow", allStatuses[0].ComponentName)
+			assert.Equal(t, types.StatusDown, allStatuses[0].Status) // Most severe status
+			assert.Len(t, allStatuses[0].ActiveOutages, 2)
+
+			// Verify we have both severities present
+			severities := make(map[string]bool)
+			for _, outage := range allStatuses[0].ActiveOutages {
+				severities[string(outage.Severity)] = true
+			}
+			assert.True(t, severities[string(types.SeverityDown)])
+			assert.True(t, severities[string(types.SeverityDegraded)])
+		})
+
+		t.Run("GET status for all components with partial outages shows Partial status", func(t *testing.T) {
+			// Create outage for only one sub-component
+			tideOutage := createOutageWithSeverity(t, serverURL, "Prow", "Tide", string(types.SeverityDegraded))
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+
+			resp, err := http.Get(serverURL + "/api/status")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var allStatuses []types.ComponentStatus
+			err = json.NewDecoder(resp.Body).Decode(&allStatuses)
+			require.NoError(t, err)
+
+			// Should have exactly 1 component (Prow)
+			assert.Len(t, allStatuses, 1)
+			assert.Equal(t, "Prow", allStatuses[0].ComponentName)
+			assert.Equal(t, types.StatusPartial, allStatuses[0].Status) // Only one sub-component affected
+			assert.Len(t, allStatuses[0].ActiveOutages, 1)
+			assert.Equal(t, string(types.SeverityDegraded), string(allStatuses[0].ActiveOutages[0].Severity))
+		})
+	}
 }
