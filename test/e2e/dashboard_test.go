@@ -33,6 +33,7 @@ func TestE2E_Dashboard(t *testing.T) {
 	t.Run("Outages", testOutages(serverURL))
 	t.Run("UpdateOutage", testUpdateOutage(serverURL))
 	t.Run("DeleteOutage", testDeleteOutage(serverURL))
+	t.Run("GetOutage", testGetOutage(serverURL))
 
 	t.Log("All tests passed!")
 }
@@ -396,6 +397,71 @@ func testDeleteOutage(serverURL string) func(*testing.T) {
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+	}
+}
+
+func testGetOutage(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("GET existing outage succeeds", func(t *testing.T) {
+			// Create an outage to retrieve
+			createdOutage := createOutage(t, serverURL, "Prow", "Tide")
+			defer deleteOutage(t, serverURL, "Prow", "Tide", createdOutage.ID)
+
+			// Get the outage
+			resp, err := http.Get(serverURL + "/api/components/Prow/Tide/outages/" + fmt.Sprintf("%d", createdOutage.ID))
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+			var outage types.Outage
+			err = json.NewDecoder(resp.Body).Decode(&outage)
+			require.NoError(t, err)
+
+			assert.Equal(t, createdOutage.ID, outage.ID)
+			assert.Equal(t, "Tide", outage.ComponentName)
+			assert.Equal(t, "Down", outage.Severity)
+			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
+			assert.Equal(t, "test-user", outage.CreatedBy)
+		})
+
+		t.Run("GET non-existent outage returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/Prow/Tide/outages/99999")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("GET outage from non-existent component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/NonExistentComponent/Tide/outages/1")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("GET outage from non-existent sub-component returns 404", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/Prow/NonExistentSub/outages/1")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("GET outage with wrong sub-component returns 404", func(t *testing.T) {
+			// Create an outage for Tide
+			tideOutage := createOutage(t, serverURL, "Prow", "Tide")
+			defer deleteOutage(t, serverURL, "Prow", "Tide", tideOutage.ID)
+
+			// Try to get it as if it were a Deck outage
+			resp, err := http.Get(serverURL + "/api/components/Prow/Deck/outages/" + fmt.Sprintf("%d", tideOutage.ID))
 			require.NoError(t, err)
 			defer resp.Body.Close()
 

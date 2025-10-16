@@ -282,6 +282,46 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, outage)
 }
 
+// GetOutage retrieves a specific outage by ID for a specific sub-component.
+func (h *Handlers) GetOutage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	componentName := vars["componentName"]
+	subComponentName := vars["subComponentName"]
+	outageId := vars["outageId"]
+
+	logger := h.logger.WithFields(logrus.Fields{
+		"component":     componentName,
+		"sub_component": subComponentName,
+		"outage_id":     outageId,
+	})
+
+	component := h.getComponent(componentName)
+	if component == nil {
+		respondWithError(w, http.StatusNotFound, "Component not found")
+		return
+	}
+
+	subComponent := component.GetSubComponent(subComponentName)
+	if subComponent == nil {
+		respondWithError(w, http.StatusNotFound, "Sub-component not found")
+		return
+	}
+
+	var outage types.Outage
+	if err := h.db.Where("id = ? AND component_name = ?", outageId, subComponentName).First(&outage).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			respondWithError(w, http.StatusNotFound, "Outage not found")
+			return
+		}
+		logger.WithField("error", err).Error("Failed to query outage from database")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get outage")
+		return
+	}
+
+	logger.Info("Successfully retrieved outage")
+	respondWithJSON(w, http.StatusOK, outage)
+}
+
 // DeleteOutage deletes an outage by ID for a specific sub-component.
 func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
