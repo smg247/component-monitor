@@ -11,11 +11,14 @@ DB_NAME="ship_status_test"
 cleanup() {
   echo "Cleaning up dashboard processes..."
   if [ ! -z "$DASHBOARD_PID" ]; then
-    kill $DASHBOARD_PID 2>/dev/null || true
+    kill -TERM $DASHBOARD_PID 2>/dev/null || true
+    sleep 2
+    kill -KILL $DASHBOARD_PID 2>/dev/null || true
     wait $DASHBOARD_PID 2>/dev/null || true
   fi
   pkill -f "go run.*cmd/dashboard" 2>/dev/null || true
-  sleep 1
+  pkill -f "dashboard.*--config.*test/e2e/config.yaml" 2>/dev/null || true
+  sleep 2
   
   echo "Cleaning up test container..."
   podman stop $CONTAINER_NAME 2>/dev/null || true
@@ -24,7 +27,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-echo "Cleaning up any existing test container..."
+echo "Cleaning up any existing test postgres container..."
 podman stop $CONTAINER_NAME 2>/dev/null || true
 podman rm $CONTAINER_NAME 2>/dev/null || true
 
@@ -107,15 +110,14 @@ for i in {1..30}; do
 done
 
 echo "Running e2e tests..."
-cd "$PROJECT_ROOT/test/e2e"
 export TEST_SERVER_PORT="$DASHBOARD_PORT"
-set +e
-gotestsum --format testname -- -timeout 30s .
+gotestsum ./test/e2e/... -count 1 -p 1
 TEST_EXIT_CODE=$?
-set -e
 
 echo "Stopping dashboard server..."
-kill $DASHBOARD_PID 2>/dev/null || true
+kill -TERM $DASHBOARD_PID 2>/dev/null || true
+sleep 2
+kill -KILL $DASHBOARD_PID 2>/dev/null || true
 wait $DASHBOARD_PID 2>/dev/null || true
 
 echo "=== Server Output Log ==="

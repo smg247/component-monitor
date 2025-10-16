@@ -40,55 +40,13 @@ func respondWithError(w http.ResponseWriter, statusCode int, message string) {
 	})
 }
 
-func (h *Handlers) findComponent(componentName string) (*types.Component, *types.SubComponent) {
+func (h *Handlers) getComponent(componentName string) *types.Component {
 	for _, component := range h.config.Components {
 		if component.Name == componentName {
-			return &component, nil
-		}
-		for _, subComponent := range component.Subcomponents {
-			if subComponent.Name == componentName {
-				return &component, &subComponent
-			}
+			return &component
 		}
 	}
-	return nil, nil
-}
-
-func (h *Handlers) componentExists(componentName string) bool {
-	component, subComponent := h.findComponent(componentName)
-	return component != nil || subComponent != nil
-}
-
-func (h *Handlers) isTopLevelComponent(componentName string) bool {
-	component, subComponent := h.findComponent(componentName)
-	return component != nil && subComponent == nil
-}
-
-func (h *Handlers) getSubComponentNames(topLevelComponentName string) []string {
-	component, _ := h.findComponent(topLevelComponentName)
-	if component == nil {
-		return nil
-	}
-
-	names := make([]string, len(component.Subcomponents))
-	for i, sub := range component.Subcomponents {
-		names[i] = sub.Name
-	}
-	return names
-}
-
-func (h *Handlers) validateSubComponentBelongsToComponent(componentName, subComponentName string) bool {
-	for _, component := range h.config.Components {
-		if component.Name == componentName {
-			for _, subComponent := range component.Subcomponents {
-				if subComponent.Name == subComponentName {
-					return true
-				}
-			}
-			return false
-		}
-	}
-	return false
+	return nil
 }
 
 func (h *Handlers) validateOutage(outage *types.Outage) (string, bool) {
@@ -128,26 +86,18 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 
 	logger := h.logger.WithField("component", componentName)
 
-	if !h.componentExists(componentName) {
+	component := h.getComponent(componentName)
+	if component == nil {
 		respondWithError(w, http.StatusNotFound, "Component not found")
 		return
 	}
-
-	var outages []types.Outage
-	var componentNames []string
-
-	if h.isTopLevelComponent(componentName) {
-		subComponents := h.getSubComponentNames(componentName)
-		if len(subComponents) == 0 {
-			respondWithJSON(w, http.StatusOK, []types.Outage{})
-			return
-		}
-		componentNames = subComponents
-	} else {
-		componentNames = []string{componentName}
+	subComponents := []string{}
+	for _, subComponent := range component.Subcomponents {
+		subComponents = append(subComponents, subComponent.Name)
 	}
 
-	if err := h.db.Where("component_name IN ?", componentNames).Order("start_time DESC").Find(&outages).Error; err != nil {
+	var outages []types.Outage
+	if err := h.db.Where("component_name IN ?", subComponents).Order("start_time DESC").Find(&outages).Error; err != nil {
 		logger.WithField("error", err).Error("Failed to query outages from database")
 		respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
 		return
@@ -162,13 +112,14 @@ func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
 
-	if !h.componentExists(componentName) {
+	component := h.getComponent(componentName)
+	if component == nil {
 		respondWithError(w, http.StatusNotFound, "Component not found")
 		return
 	}
-
-	if !h.validateSubComponentBelongsToComponent(componentName, subComponentName) {
-		respondWithError(w, http.StatusNotFound, "Sub-component not found or does not belong to the specified component")
+	subComponent := component.GetSubComponent(subComponentName)
+	if subComponent == nil {
+		respondWithError(w, http.StatusNotFound, "Sub-Component not found")
 		return
 	}
 
@@ -235,13 +186,15 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	})
 	logger.Info("Updating outage")
 
-	if !h.componentExists(componentName) {
+	component := h.getComponent(componentName)
+	if component == nil {
 		respondWithError(w, http.StatusNotFound, "Component not found")
 		return
 	}
 
-	if !h.validateSubComponentBelongsToComponent(componentName, subComponentName) {
-		respondWithError(w, http.StatusNotFound, "Sub-component not found or does not belong to the specified component")
+	subComponent := component.GetSubComponent(subComponentName)
+	if subComponent == nil {
+		respondWithError(w, http.StatusNotFound, "Sub-Component not found")
 		return
 	}
 
