@@ -21,11 +21,10 @@ func TestE2E_Dashboard(t *testing.T) {
 		t.Skip("Skipping e2e test in short mode")
 	}
 
-	ctx := context.Background()
-
-	// Use existing PostgreSQL instance
-	// Assumes postgres is running on localhost:5432 with ship_status database
-	connStr := "postgres://postgres:postgres@localhost:5432/ship_status?sslmode=disable&client_encoding=UTF8"
+	connStr := os.Getenv("TEST_DATABASE_DSN")
+	if connStr == "" {
+		t.Fatal("TEST_DATABASE_DSN environment variable is required")
+	}
 
 	t.Logf("Using PostgreSQL at: %s", connStr)
 
@@ -43,16 +42,12 @@ func TestE2E_Dashboard(t *testing.T) {
 
 	// Start dashboard server
 	t.Log("Starting dashboard server...")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dashboardCmd := exec.CommandContext(ctx, "go", "run", "../../cmd/dashboard", "--config", configPath, "--port", "8888", "--dsn", connStr)
-	dashboardCmd.Stdout = os.Stdout
-	dashboardCmd.Stderr = os.Stderr
 	err = dashboardCmd.Start()
 	require.NoError(t, err)
-	defer func() {
-		if dashboardCmd.Process != nil {
-			dashboardCmd.Process.Kill()
-		}
-	}()
 
 	// Wait for server to be ready
 	serverURL := "http://localhost:8888"
@@ -67,8 +62,33 @@ func TestE2E_Dashboard(t *testing.T) {
 
 	t.Log("Dashboard server is ready")
 
-	// Test /api/components endpoint
-	t.Run("GET /api/components", func(t *testing.T) {
+	t.Run("Health", testHealth(serverURL))
+	t.Run("Components", testComponents(serverURL))
+	t.Run("Outages", testOutages(serverURL))
+
+	t.Log("All tests passed!")
+}
+
+func testHealth(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		resp, err := http.Get(serverURL + "/health")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+		var health map[string]interface{}
+		err = json.NewDecoder(resp.Body).Decode(&health)
+		require.NoError(t, err)
+
+		assert.Equal(t, "ok", health["status"])
+		assert.NotEmpty(t, health["time"])
+	}
+}
+
+func testComponents(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
 		resp, err := http.Get(serverURL + "/api/components")
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -87,60 +107,84 @@ func TestE2E_Dashboard(t *testing.T) {
 		assert.Equal(t, "#test-channel", components[0].SlackChannel)
 		assert.Len(t, components[0].Subcomponents, 1)
 		assert.Equal(t, "SubTest", components[0].Subcomponents[0].Name)
-	})
+	}
+}
 
-	// Test /health endpoint
-	t.Run("GET /health", func(t *testing.T) {
-		resp, err := http.Get(serverURL + "/health")
-		require.NoError(t, err)
-		defer resp.Body.Close()
+func testOutages(serverURL string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Run("POST to top-level component fails", func(t *testing.T) {
+			outagePayload := map[string]interface{}{
+				"severity":        "Down",
+				"start_time":      time.Now().UTC().Format(time.RFC3339),
+				"description":     "Test outage",
+				"discovered_from": "e2e-test",
+				"created_by":      "test-user",
+			}
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+			payloadBytes, err := json.Marshal(outagePayload)
+			require.NoError(t, err)
 
-		var health map[string]interface{}
-		err = json.NewDecoder(resp.Body).Decode(&health)
-		require.NoError(t, err)
+			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/outages",
+				bytes.NewBuffer(payloadBytes))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
 
-		assert.Equal(t, "ok", health["status"])
-		assert.NotEmpty(t, health["time"])
-	})
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-	// Test POST /api/components/{componentName}/outages
-	t.Run("POST /api/components/TestComponent/outages", func(t *testing.T) {
-		outagePayload := map[string]interface{}{
-			"severity":        "Down",
-			"start_time":      time.Now().UTC().Format(time.RFC3339),
-			"description":     "Test outage",
-			"discovered_from": "e2e-test",
-			"created_by":      "test-user",
-		}
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
 
-		payloadBytes, err := json.Marshal(outagePayload)
-		require.NoError(t, err)
+		t.Run("POST to sub-component succeeds", func(t *testing.T) {
+			outagePayload := map[string]interface{}{
+				"severity":        "Down",
+				"start_time":      time.Now().UTC().Format(time.RFC3339),
+				"description":     "Test outage for sub-component",
+				"discovered_from": "e2e-test",
+				"created_by":      "test-user",
+			}
 
-		req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/outages",
-			bytes.NewBuffer(payloadBytes))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
+			payloadBytes, err := json.Marshal(outagePayload)
+			require.NoError(t, err)
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
+			req, err := http.NewRequest("POST", serverURL+"/api/components/SubTest/outages",
+				bytes.NewBuffer(payloadBytes))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
 
-		assert.Equal(t, http.StatusCreated, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-		var outage types.Outage
-		err = json.NewDecoder(resp.Body).Decode(&outage)
-		require.NoError(t, err)
+			assert.Equal(t, http.StatusCreated, resp.StatusCode)
+			assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-		assert.NotZero(t, outage.ID)
-		assert.Equal(t, "TestComponent", outage.ComponentName)
-		assert.Equal(t, "Down", outage.Severity)
-		assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
-	})
+			var outage types.Outage
+			err = json.NewDecoder(resp.Body).Decode(&outage)
+			require.NoError(t, err)
 
-	t.Log("All tests passed!")
+			assert.NotZero(t, outage.ID)
+			assert.Equal(t, "SubTest", outage.ComponentName)
+			assert.Equal(t, "Down", outage.Severity)
+			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
+		})
+
+		t.Run("GET on top-level component aggregates sub-components", func(t *testing.T) {
+			resp, err := http.Get(serverURL + "/api/components/TestComponent/outages")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+			var outages []types.Outage
+			err = json.NewDecoder(resp.Body).Decode(&outages)
+			require.NoError(t, err)
+
+			assert.Len(t, outages, 1)
+			assert.Equal(t, "SubTest", outages[0].ComponentName)
+		})
+	}
 }
