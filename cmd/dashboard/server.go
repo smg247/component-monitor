@@ -36,7 +36,9 @@ func (s *Server) setupRoutes() http.Handler {
 	router.HandleFunc("/health", s.handlers.Health).Methods("GET")
 	router.HandleFunc("/api/components", s.handlers.GetComponents).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.UpdateOutage).Methods("PATCH")
+	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages/{outageId:[0-9]+}", s.handlers.DeleteOutage).Methods("DELETE")
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages", s.handlers.CreateOutage).Methods("POST")
+	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages", s.handlers.GetSubComponentOutages).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/outages", s.handlers.GetOutages).Methods("GET")
 
 	router.Use(s.loggingMiddleware)
