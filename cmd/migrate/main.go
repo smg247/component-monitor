@@ -25,26 +25,26 @@ func main() {
 		log.Fatal("DSN cannot be empty")
 	}
 
-	log.Infof("Connecting to PostgreSQL database")
+	log.Info("Connecting to PostgreSQL database")
 
 	db, err := gorm.Open(postgres.Open(*dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.WithField("error", err).Fatal("Failed to connect to database")
 	}
 
 	log.Info("Running migrations...")
 
 	if err := db.AutoMigrate(&types.Outage{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+		log.WithField("error", err).Fatal("Failed to migrate database")
 	}
 
 	log.Info("Migration completed successfully")
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("Failed to get database instance: %v", err)
+		log.WithField("error", err).Fatal("Failed to get database instance")
 	}
 
 	var tableCount int64
@@ -53,7 +53,7 @@ func main() {
 	log.Infof("Database contains %d tables", tableCount)
 
 	if err := sqlDB.Close(); err != nil {
-		log.Warnf("Failed to close database: %v", err)
+		log.WithField("error", err).Warn("Failed to close database")
 	}
 
 	fmt.Println("\n✓ Migration complete")

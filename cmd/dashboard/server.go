@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Server represents the HTTP server for the dashboard API.
 type Server struct {
 	logger   *logrus.Logger
 	config   *types.Config
@@ -17,13 +18,8 @@ type Server struct {
 	db       *gorm.DB
 }
 
-func NewServer(config *types.Config, db *gorm.DB) *Server {
-	logger := logrus.New()
-	logger.SetLevel(logrus.InfoLevel)
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-
+// NewServer creates a new Server instance with the provided configuration, database connection, and logger.
+func NewServer(config *types.Config, db *gorm.DB, logger *logrus.Logger) *Server {
 	handlers := NewHandlers(logger, config, db)
 
 	return &Server{
@@ -61,6 +57,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Start begins listening for HTTP requests on the specified address.
 func (s *Server) Start(addr string) error {
 	handler := s.setupRoutes()
 	s.logger.Infof("Starting dashboard server on %s", addr)

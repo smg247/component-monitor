@@ -13,12 +13,14 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// Options contains command-line configuration options for the dashboard server.
 type Options struct {
 	ConfigPath  string
 	Port        string
 	DatabaseDSN string
 }
 
+// NewOptions parses command-line flags and returns a new Options instance.
 func NewOptions() *Options {
 	opts := &Options{}
 
@@ -30,6 +32,7 @@ func NewOptions() *Options {
 	return opts
 }
 
+// Validate checks that all required options are provided and valid.
 func (o *Options) Validate() error {
 	if o.ConfigPath == "" {
 		return errors.New("config path is required (use --config flag)")
@@ -50,46 +53,66 @@ func (o *Options) Validate() error {
 	return nil
 }
 
-func main() {
+func setupLogger() *logrus.Logger {
 	log := logrus.New()
 	log.SetLevel(logrus.InfoLevel)
 	log.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
+	return log
+}
 
-	opts := NewOptions()
+func loadConfig(log *logrus.Logger, configPath string) *types.Config {
+	log.Infof("Loading config from %s", configPath)
 
-	if err := opts.Validate(); err != nil {
-		log.Fatalf("Invalid options: %v", err)
-	}
-
-	log.Infof("Loading config from %s", opts.ConfigPath)
-
-	configFile, err := os.ReadFile(opts.ConfigPath)
+	configFile, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Fatalf("Failed to read config file: %v", err)
+		log.WithFields(logrus.Fields{
+			"config_path": configPath,
+			"error":       err,
+		}).Fatal("Failed to read config file")
 	}
 
 	var config types.Config
 	if err := yaml.Unmarshal(configFile, &config); err != nil {
-		log.Fatalf("Failed to parse config file: %v", err)
+		log.WithFields(logrus.Fields{
+			"config_path": configPath,
+			"error":       err,
+		}).Fatal("Failed to parse config file")
 	}
 
 	log.Infof("Loaded configuration with %d components", len(config.Components))
+	return &config
+}
 
-	// Connect to database
+func connectDatabase(log *logrus.Logger, dsn string) *gorm.DB {
 	log.Info("Connecting to PostgreSQL database")
-	db, err := gorm.Open(postgres.Open(opts.DatabaseDSN), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.WithField("error", err).Fatal("Failed to connect to database")
+	}
+	return db
+}
+
+func main() {
+	log := setupLogger()
+	opts := NewOptions()
+
+	if err := opts.Validate(); err != nil {
+		log.WithField("error", err).Fatal("Invalid command-line options")
 	}
 
-	server := NewServer(&config, db)
+	config := loadConfig(log, opts.ConfigPath)
+	db := connectDatabase(log, opts.DatabaseDSN)
+	server := NewServer(config, db, log)
 
 	addr := ":" + opts.Port
 	if err := server.Start(addr); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+		log.WithFields(logrus.Fields{
+			"address": addr,
+			"error":   err,
+		}).Fatal("Server failed to start")
 	}
 }

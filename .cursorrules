@@ -26,6 +26,8 @@ This is a Go-based dashboard application for monitoring component status, availa
 - Use `gofmt` for formatting (enforced)
 - Organize imports in standard library, external, local order
 - Keep functions focused and testable
+- Don't do anything too clever, focus on readibility
+- Look to reuse logic instead of copying where possible
 - Use meaningful variable and function names
 - Add godoc comments for exported types and functions
 

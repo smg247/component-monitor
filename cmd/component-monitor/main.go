@@ -15,10 +15,12 @@ import (
 	"k8s.io/client-go/transport"
 )
 
+// PrometheusClient wraps the Prometheus API client for querying metrics.
 type PrometheusClient struct {
 	api v1.API
 }
 
+// NewPrometheusClient creates a new Prometheus client configured for OpenShift monitoring.
 func NewPrometheusClient(prometheusURL string) (*PrometheusClient, error) {
 	kubeconfigPath := os.Getenv("KUBECONFIG")
 	if kubeconfigPath == "" {
@@ -60,6 +62,7 @@ func NewPrometheusClient(prometheusURL string) (*PrometheusClient, error) {
 	}, nil
 }
 
+// QueryMetrics executes a list of Prometheus queries and logs the results.
 func (p *PrometheusClient) QueryMetrics(ctx context.Context, queries []string) error {
 	for _, query := range queries {
 		logrus.Infof("Executing query: %s", query)
@@ -108,11 +111,14 @@ func main() {
 
 	client, err := NewPrometheusClient(prometheusURL)
 	if err != nil {
-		logrus.Fatalf("Failed to create Prometheus client: %v", err)
+		logrus.WithFields(logrus.Fields{
+			"prometheus_url": prometheusURL,
+			"error":          err,
+		}).Fatal("Failed to create Prometheus client")
 	}
 
 	queries := []string{
-		"1", //TODO: this is just to make sure this is working
+		"1",
 		"absent(up{job=\"deck\"} == 1)",
 		"absent(up{job=\"crier\"} == 1)",
 	}
@@ -124,7 +130,7 @@ func main() {
 	for {
 		logrus.Info("Executing Prometheus queries...")
 		if err := client.QueryMetrics(ctx, queries); err != nil {
-			logrus.Errorf("Failed to query metrics: %v", err)
+			logrus.WithField("error", err).Error("Failed to query metrics")
 		}
 
 		logrus.Info("Sleeping for 30 seconds...")
