@@ -84,10 +84,9 @@ echo "Using port $DASHBOARD_PORT for dashboard server"
 echo "Starting dashboard server..."
 DASHBOARD_PID=""
 DASHBOARD_LOG="/tmp/dashboard-server.log"
-DASHBOARD_ERROR_LOG="/tmp/dashboard-server-errors.log"
 
 # Start dashboard server in background
-go run ./cmd/dashboard --config test/e2e/config.yaml --port $DASHBOARD_PORT --dsn "$DSN" > "$DASHBOARD_LOG" 2> "$DASHBOARD_ERROR_LOG" &
+go run ./cmd/dashboard --config test/e2e/config.yaml --port $DASHBOARD_PORT --dsn "$DSN" 2> "$DASHBOARD_LOG" &
 DASHBOARD_PID=$!
 
 # Wait for server to be ready
@@ -99,10 +98,8 @@ for i in {1..30}; do
   fi
   if [ $i -eq 30 ]; then
     echo "Dashboard server failed to start"
-    echo "=== Server Output Log ==="
-    cat "$DASHBOARD_LOG" 2>/dev/null || echo "No output log found"
-    echo "=== Server Error Log ==="
-    cat "$DASHBOARD_ERROR_LOG" 2>/dev/null || echo "No error log found"
+    echo "=== Server Log ==="
+    cat "$DASHBOARD_LOG" 2>/dev/null || echo "No log found"
     kill $DASHBOARD_PID 2>/dev/null || true
     exit 1
   fi
@@ -120,10 +117,8 @@ sleep 2
 kill -KILL $DASHBOARD_PID 2>/dev/null || true
 wait $DASHBOARD_PID 2>/dev/null || true
 
-echo "=== Server Output Log ==="
-cat "$DASHBOARD_LOG" 2>/dev/null || echo "No output log found"
-echo "=== Server Error Log ==="
-cat "$DASHBOARD_ERROR_LOG" 2>/dev/null || echo "No error log found"
+echo "=== Server Log ==="
+cat "$DASHBOARD_LOG" 2>/dev/null || echo "No log found"
 
 echo ""
 if [ $TEST_EXIT_CODE -eq 0 ]; then

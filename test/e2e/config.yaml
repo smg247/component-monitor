@@ -1,11 +1,15 @@
 components:
-  - name: TestComponent
-    description: A test component
-    ship_team: TestTeam
+  - name: Prow
+    description: Backbone of the CI system
+    ship_team: TestPlatform
     slack_channel: "#test-channel"
     sub_components:
-      - name: SubTest
-        description: A test subcomponent
+      - name: Tide
+        description: Merges PRs
+        managed: true
+        requires_confirmation: false
+      - name: Deck
+        description: The frontend for Prow
         managed: true
         requires_confirmation: false
     owners:

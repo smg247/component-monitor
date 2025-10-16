@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"ship-status-dash/pkg/types"
@@ -215,44 +216,31 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updates := make(map[string]interface{})
-
 	if updateReq.Severity != nil {
-		updates["severity"] = *updateReq.Severity
+		outage.Severity = *updateReq.Severity
 	}
 	if updateReq.StartTime != nil {
-		updates["start_time"] = *updateReq.StartTime
+		outage.StartTime = *updateReq.StartTime
 	}
 	if updateReq.EndTime != nil {
-		updates["end_time"] = *updateReq.EndTime
+		outage.EndTime = sql.NullTime{Time: *updateReq.EndTime, Valid: true}
 	}
 	if updateReq.Description != nil {
-		updates["description"] = *updateReq.Description
+		outage.Description = *updateReq.Description
 	}
 	if updateReq.ResolvedBy != nil {
-		updates["resolved_by"] = *updateReq.ResolvedBy
+		outage.ResolvedBy = updateReq.ResolvedBy
 	}
 	if updateReq.ConfirmedAt != nil {
-		updates["confirmed_at"] = *updateReq.ConfirmedAt
+		outage.ConfirmedAt = sql.NullTime{Time: *updateReq.ConfirmedAt, Valid: true}
 	}
 	if updateReq.TriageNotes != nil {
-		updates["triage_notes"] = *updateReq.TriageNotes
+		outage.TriageNotes = updateReq.TriageNotes
 	}
 
-	if len(updates) == 0 {
-		respondWithJSON(w, http.StatusOK, outage)
-		return
-	}
-
-	if err := h.db.Model(&outage).Updates(updates).Error; err != nil {
+	if err := h.db.Save(&outage).Error; err != nil {
 		logger.WithField("error", err).Error("Failed to update outage in database")
 		respondWithError(w, http.StatusInternalServerError, "Failed to update outage")
-		return
-	}
-
-	if err := h.db.Where("id = ?", uint(outageID)).First(&outage).Error; err != nil {
-		logger.WithField("error", err).Error("Failed to fetch updated outage from database")
-		respondWithError(w, http.StatusInternalServerError, "Failed to get updated outage")
 		return
 	}
 

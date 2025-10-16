@@ -68,12 +68,13 @@ func testComponents(serverURL string) func(*testing.T) {
 		require.NoError(t, err)
 
 		assert.Len(t, components, 1)
-		assert.Equal(t, "TestComponent", components[0].Name)
-		assert.Equal(t, "A test component", components[0].Description)
-		assert.Equal(t, "TestTeam", components[0].ShipTeam)
+		assert.Equal(t, "Prow", components[0].Name)
+		assert.Equal(t, "Backbone of the CI system", components[0].Description)
+		assert.Equal(t, "TestPlatform", components[0].ShipTeam)
 		assert.Equal(t, "#test-channel", components[0].SlackChannel)
-		assert.Len(t, components[0].Subcomponents, 1)
-		assert.Equal(t, "SubTest", components[0].Subcomponents[0].Name)
+		assert.Len(t, components[0].Subcomponents, 2)
+		assert.Equal(t, "Tide", components[0].Subcomponents[0].Name)
+		assert.Equal(t, "Deck", components[0].Subcomponents[1].Name)
 	}
 }
 
@@ -91,7 +92,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			payloadBytes, err := json.Marshal(outagePayload)
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/outages",
+			req, err := http.NewRequest("POST", serverURL+"/api/components/Prow/outages",
 				bytes.NewBuffer(payloadBytes))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
@@ -116,7 +117,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			payloadBytes, err := json.Marshal(outagePayload)
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/SubTest/outages",
+			req, err := http.NewRequest("POST", serverURL+"/api/components/Prow/Tide/outages",
 				bytes.NewBuffer(payloadBytes))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
@@ -134,7 +135,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			require.NoError(t, err)
 
 			assert.NotZero(t, outage.ID)
-			assert.Equal(t, "SubTest", outage.ComponentName)
+			assert.Equal(t, "Tide", outage.ComponentName)
 			assert.Equal(t, "Down", outage.Severity)
 			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
 		})
@@ -151,7 +152,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			payloadBytes, err := json.Marshal(outagePayload)
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/NonExistentSub/outages",
+			req, err := http.NewRequest("POST", serverURL+"/api/components/Prow/NonExistentSub/outages",
 				bytes.NewBuffer(payloadBytes))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
@@ -165,7 +166,7 @@ func testOutages(serverURL string) func(*testing.T) {
 		})
 
 		t.Run("GET on top-level component aggregates sub-components", func(t *testing.T) {
-			resp, err := http.Get(serverURL + "/api/components/TestComponent/outages")
+			resp, err := http.Get(serverURL + "/api/components/Prow/outages")
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
@@ -176,7 +177,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			require.NoError(t, err)
 
 			assert.Len(t, outages, 1)
-			assert.Equal(t, "SubTest", outages[0].ComponentName)
+			assert.Equal(t, "Tide", outages[0].ComponentName)
 		})
 	}
 }
@@ -195,7 +196,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		payloadBytes, err := json.Marshal(outagePayload)
 		require.NoError(t, err)
 
-		req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/SubTest/outages",
+		req, err := http.NewRequest("POST", serverURL+"/api/components/Prow/Tide/outages",
 			bytes.NewBuffer(payloadBytes))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
@@ -222,7 +223,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		updateBytes, err := json.Marshal(updatePayload)
 		require.NoError(t, err)
 
-		updateURL := serverURL + "/api/components/TestComponent/SubTest/outages/" + fmt.Sprintf("%d", createdOutage.ID)
+		updateURL := serverURL + "/api/components/Prow/Tide/outages/" + fmt.Sprintf("%d", createdOutage.ID)
 		t.Logf("Making PATCH request to: %s", updateURL)
 
 		updateReq, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(updateBytes))
@@ -255,7 +256,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 
 		// Test updating non-existent outage
 		nonExistentReq, err := http.NewRequest("PATCH",
-			serverURL+"/api/components/TestComponent/SubTest/outages/99999",
+			serverURL+"/api/components/Prow/Tide/outages/99999",
 			bytes.NewBuffer(updateBytes))
 		require.NoError(t, err)
 		nonExistentReq.Header.Set("Content-Type", "application/json")
@@ -268,7 +269,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 
 		// Test updating with invalid component
 		invalidComponentReq, err := http.NewRequest("PATCH",
-			serverURL+"/api/components/NonExistentComponent/SubTest/outages/"+fmt.Sprintf("%d", createdOutage.ID),
+			serverURL+"/api/components/NonExistentComponent/Tide/outages/"+fmt.Sprintf("%d", createdOutage.ID),
 			bytes.NewBuffer(updateBytes))
 		require.NoError(t, err)
 		invalidComponentReq.Header.Set("Content-Type", "application/json")
