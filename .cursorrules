@@ -14,9 +14,6 @@ This is a Go-based dashboard application for monitoring component status, availa
 
 ## Project Structure
 - `cmd/`: Command-line applications
-  - `dashboard/`: Main dashboard server with HTTP API
-  - `component-monitor/`: Component monitoring service
-  - `migrate/`: Database migration utility
 - `pkg/types/`: Core data models and types
 - `deploy/`: Deployment configurations
 - `test/`: Test utilities and fixtures
@@ -94,8 +91,7 @@ Components are defined in YAML with:
 - Module name: `component-monitor`
 
 ### Testing
-- Write table-driven tests using `testify`
-- Use `testcontainers` for integration tests requiring PostgreSQL
+- Write table-driven tests
 - Place tests in `*_test.go` files
 - Run tests with `go test ./...`
 
@@ -103,24 +99,6 @@ Components are defined in YAML with:
 - Use the `cmd/migrate` utility for schema changes
 - Test migrations with both up and down operations
 - Document schema changes in migration files
-
-## Common Patterns
-
-### Starting the Dashboard Server
-```go
-opts := NewOptions()  // Parse flags
-opts.Validate()       // Validate configuration
-// Load YAML config
-// Connect to PostgreSQL
-server := NewServer(config, db)
-server.Start(addr)
-```
-
-### Working with Outages
-- Use `gorm.Model` for automatic timestamps
-- Set `AutoResolve: true` for automatic incident resolution
-- Use `ConfirmedBy` workflow for outages requiring manual confirmation
-- Track discovery source in `DiscoveredFrom` field
 
 ## Important Considerations
 
@@ -130,17 +108,6 @@ server.Start(addr)
 - Validate all user inputs
 - Use parameterized queries (GORM handles this)
 
-### Performance
-- Add database indexes for frequently queried columns
-- Use connection pooling for PostgreSQL
-- Consider caching for frequently accessed data
-- Monitor Prometheus metrics for performance insights
-
-### Monitoring Integration
-- Components can be monitored via Prometheus queries
-- Integrate with Kubernetes/OpenShift for infrastructure status
-- Track outages and availability metrics
-
 ## Dependencies to Know
 - `github.com/gorilla/mux`: HTTP routing
 - `gorm.io/gorm`: ORM with PostgreSQL driver
@@ -148,10 +115,3 @@ server.Start(addr)
 - `github.com/prometheus/client_golang`: Prometheus metrics
 - `k8s.io/client-go`: Kubernetes API client
 - `github.com/openshift/client-go`: OpenShift API client
-
-## When Making Changes
-- Ensure backward compatibility with existing configurations
-- Update tests for any new functionality
-- Add appropriate logging for debugging
-- Consider impact on running outage tracking
-- Document any new API endpoints or configuration options

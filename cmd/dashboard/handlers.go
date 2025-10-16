@@ -97,7 +97,7 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var outages []types.Outage
-
+	var componentNames []string
 	// If it's a top-level component, get outages from all sub-components
 	if h.isTopLevelComponent(componentName) {
 		subComponents := h.getSubComponentNames(componentName)
@@ -106,19 +106,15 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 			respondWithJSON(w, []types.Outage{})
 			return
 		}
-
-		if err := h.db.Where("component_name IN ?", subComponents).Order("start_time DESC").Find(&outages).Error; err != nil {
-			h.logger.Errorf("Failed to get outages: %v", err)
-			respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
-			return
-		}
+		componentNames = subComponents
 	} else {
-		// Sub-component, get outages directly
-		if err := h.db.Where("component_name = ?", componentName).Order("start_time DESC").Find(&outages).Error; err != nil {
-			h.logger.Errorf("Failed to get outages: %v", err)
-			respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
-			return
-		}
+		componentNames = []string{componentName}
+	}
+
+	if err := h.db.Where("component_name IN ?", componentNames).Order("start_time DESC").Find(&outages).Error; err != nil {
+		h.logger.Errorf("Failed to get outages: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
+		return
 	}
 
 	respondWithJSON(w, outages)
