@@ -77,6 +77,20 @@ func (h *Handlers) getSubComponentNames(topLevelComponentName string) []string {
 	return names
 }
 
+func (h *Handlers) validateSubComponentBelongsToComponent(componentName, subComponentName string) bool {
+	for _, component := range h.config.Components {
+		if component.Name == componentName {
+			for _, subComponent := range component.Subcomponents {
+				if subComponent.Name == subComponentName {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
+}
+
 func (h *Handlers) validateOutage(outage *types.Outage) (string, bool) {
 	if outage.Severity == "" {
 		return "Severity is required", false
@@ -146,14 +160,15 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
+	subComponentName := vars["subComponentName"]
 
 	if !h.componentExists(componentName) {
 		respondWithError(w, http.StatusNotFound, "Component not found")
 		return
 	}
 
-	if h.isTopLevelComponent(componentName) {
-		respondWithError(w, http.StatusBadRequest, "Cannot create outages for top-level components. Create outages for sub-components instead.")
+	if !h.validateSubComponentBelongsToComponent(componentName, subComponentName) {
+		respondWithError(w, http.StatusNotFound, "Sub-component not found or does not belong to the specified component")
 		return
 	}
 
@@ -163,7 +178,7 @@ func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outage.ComponentName = componentName
+	outage.ComponentName = subComponentName
 
 	if message, valid := h.validateOutage(&outage); !valid {
 		respondWithError(w, http.StatusBadRequest, message)
@@ -172,6 +187,7 @@ func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 
 	logger := h.logger.WithFields(logrus.Fields{
 		"component":       componentName,
+		"sub_component":   subComponentName,
 		"severity":        outage.Severity,
 		"created_by":      outage.CreatedBy,
 		"discovered_from": outage.DiscoveredFrom,
@@ -203,6 +219,7 @@ type UpdateOutageRequest struct {
 func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
+	subComponentName := vars["subComponentName"]
 	outageIDStr := vars["outageId"]
 
 	outageID, err := strconv.ParseUint(outageIDStr, 10, 32)
@@ -212,8 +229,9 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger := h.logger.WithFields(logrus.Fields{
-		"outage_id": outageID,
-		"component": componentName,
+		"outage_id":     outageID,
+		"component":     componentName,
+		"sub_component": subComponentName,
 	})
 	logger.Info("Updating outage")
 
@@ -222,8 +240,13 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.validateSubComponentBelongsToComponent(componentName, subComponentName) {
+		respondWithError(w, http.StatusNotFound, "Sub-component not found or does not belong to the specified component")
+		return
+	}
+
 	var outage types.Outage
-	if err := h.db.Where("id = ? AND component_name = ?", uint(outageID), componentName).First(&outage).Error; err != nil {
+	if err := h.db.Where("id = ? AND component_name = ?", uint(outageID), subComponentName).First(&outage).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondWithError(w, http.StatusNotFound, "Outage not found")
 			return

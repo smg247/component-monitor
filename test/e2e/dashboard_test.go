@@ -79,7 +79,7 @@ func testComponents(serverURL string) func(*testing.T) {
 
 func testOutages(serverURL string) func(*testing.T) {
 	return func(t *testing.T) {
-		t.Run("POST to top-level component fails", func(t *testing.T) {
+		t.Run("POST to top-level component fails (old endpoint)", func(t *testing.T) {
 			outagePayload := map[string]interface{}{
 				"severity":        "Down",
 				"start_time":      time.Now().UTC().Format(time.RFC3339),
@@ -101,10 +101,10 @@ func testOutages(serverURL string) func(*testing.T) {
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
-			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 		})
 
-		t.Run("POST to sub-component succeeds", func(t *testing.T) {
+		t.Run("POST to sub-component with new URI structure succeeds", func(t *testing.T) {
 			outagePayload := map[string]interface{}{
 				"severity":        "Down",
 				"start_time":      time.Now().UTC().Format(time.RFC3339),
@@ -116,7 +116,7 @@ func testOutages(serverURL string) func(*testing.T) {
 			payloadBytes, err := json.Marshal(outagePayload)
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", serverURL+"/api/components/SubTest/outages",
+			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/SubTest/outages",
 				bytes.NewBuffer(payloadBytes))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
@@ -137,6 +137,31 @@ func testOutages(serverURL string) func(*testing.T) {
 			assert.Equal(t, "SubTest", outage.ComponentName)
 			assert.Equal(t, "Down", outage.Severity)
 			assert.Equal(t, "e2e-test", outage.DiscoveredFrom)
+		})
+
+		t.Run("POST to non-existent sub-component fails", func(t *testing.T) {
+			outagePayload := map[string]interface{}{
+				"severity":        "Down",
+				"start_time":      time.Now().UTC().Format(time.RFC3339),
+				"description":     "Test outage for non-existent sub-component",
+				"discovered_from": "e2e-test",
+				"created_by":      "test-user",
+			}
+
+			payloadBytes, err := json.Marshal(outagePayload)
+			require.NoError(t, err)
+
+			req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/NonExistentSub/outages",
+				bytes.NewBuffer(payloadBytes))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 
 		t.Run("GET on top-level component aggregates sub-components", func(t *testing.T) {
@@ -170,7 +195,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		payloadBytes, err := json.Marshal(outagePayload)
 		require.NoError(t, err)
 
-		req, err := http.NewRequest("POST", serverURL+"/api/components/SubTest/outages",
+		req, err := http.NewRequest("POST", serverURL+"/api/components/TestComponent/SubTest/outages",
 			bytes.NewBuffer(payloadBytes))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
@@ -197,7 +222,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 		updateBytes, err := json.Marshal(updatePayload)
 		require.NoError(t, err)
 
-		updateURL := serverURL + "/api/components/SubTest/outages/" + fmt.Sprintf("%d", createdOutage.ID)
+		updateURL := serverURL + "/api/components/TestComponent/SubTest/outages/" + fmt.Sprintf("%d", createdOutage.ID)
 		t.Logf("Making PATCH request to: %s", updateURL)
 
 		updateReq, err := http.NewRequest("PATCH", updateURL, bytes.NewBuffer(updateBytes))
@@ -230,7 +255,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 
 		// Test updating non-existent outage
 		nonExistentReq, err := http.NewRequest("PATCH",
-			serverURL+"/api/components/SubTest/outages/99999",
+			serverURL+"/api/components/TestComponent/SubTest/outages/99999",
 			bytes.NewBuffer(updateBytes))
 		require.NoError(t, err)
 		nonExistentReq.Header.Set("Content-Type", "application/json")
@@ -243,7 +268,7 @@ func testUpdateOutage(serverURL string) func(*testing.T) {
 
 		// Test updating with invalid component
 		invalidComponentReq, err := http.NewRequest("PATCH",
-			serverURL+"/api/components/NonExistentComponent/outages/"+fmt.Sprintf("%d", createdOutage.ID),
+			serverURL+"/api/components/NonExistentComponent/SubTest/outages/"+fmt.Sprintf("%d", createdOutage.ID),
 			bytes.NewBuffer(updateBytes))
 		require.NoError(t, err)
 		invalidComponentReq.Header.Set("Content-Type", "application/json")
