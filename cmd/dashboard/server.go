@@ -1,8 +1,8 @@
 package main
 
 import (
-	"component-monitor/pkg/types"
 	"net/http"
+	"ship-status-dash/pkg/types"
 	"time"
 
 	"github.com/gorilla/mux"

@@ -2,13 +2,13 @@ package e2e
 
 import (
 	"bytes"
-	"component-monitor/pkg/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"ship-status-dash/pkg/types"
 	"testing"
 	"time"
 

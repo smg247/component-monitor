@@ -1,4 +1,4 @@
-module component-monitor
+module ship-status-dash
 
 go 1.24.0
 

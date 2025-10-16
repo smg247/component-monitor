@@ -1,9 +1,9 @@
 package main
 
 import (
-	"component-monitor/pkg/types"
 	"flag"
 	"fmt"
+	"ship-status-dash/pkg/types"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"

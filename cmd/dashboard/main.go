@@ -1,10 +1,10 @@
 package main
 
 import (
-	"component-monitor/pkg/types"
 	"errors"
 	"flag"
 	"os"
+	"ship-status-dash/pkg/types"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"component-monitor/pkg/types"
 	"encoding/json"
 	"net/http"
+	"ship-status-dash/pkg/types"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -170,22 +170,20 @@ func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logger := h.logger.WithFields(logrus.Fields{
+		"component":       componentName,
+		"severity":        outage.Severity,
+		"created_by":      outage.CreatedBy,
+		"discovered_from": outage.DiscoveredFrom,
+	})
+
 	if err := h.db.Create(&outage).Error; err != nil {
-		h.logger.WithFields(logrus.Fields{
-			"component": componentName,
-			"severity":  outage.Severity,
-			"error":     err,
-		}).Error("Failed to create outage in database")
+		logger.WithField("error", err).Error("Failed to create outage in database")
 		respondWithError(w, http.StatusInternalServerError, "Failed to create outage")
 		return
 	}
 
-	h.logger.WithFields(logrus.Fields{
-		"outage_id":  outage.ID,
-		"component":  componentName,
-		"severity":   outage.Severity,
-		"created_by": outage.CreatedBy,
-	}).Info("Successfully created outage")
+	logger.Infof("Successfully created outage: %d", outage.ID)
 
 	respondWithJSON(w, http.StatusCreated, outage)
 }
