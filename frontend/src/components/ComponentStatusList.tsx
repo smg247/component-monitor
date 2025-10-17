@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Box, CircularProgress, Alert, Container, styled, Typography } from '@mui/material'
+import { Box, CircularProgress, Alert, Container, styled, Typography, Paper } from '@mui/material'
 import { Component } from '../types'
 import ComponentWell from './ComponentWell'
 import { getComponentsEndpoint, getOverallStatusEndpoint } from '../endpoints'
@@ -15,9 +15,35 @@ const LoadingBox = styled(Box)(({ theme }) => ({
   minHeight: '200px',
 }))
 
+const TitleSection = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3, 0),
+  marginBottom: theme.spacing(4),
+  textAlign: 'center',
+  borderBottom: `2px solid ${theme.palette.divider}`,
+}))
+
+const MainTitle = styled(Typography)(({ theme }) => ({
+  fontWeight: 600,
+  fontSize: '2rem',
+  marginBottom: theme.spacing(1),
+  color: theme.palette.text.primary,
+  [theme.breakpoints.down('md')]: {
+    fontSize: '1.75rem',
+  },
+  [theme.breakpoints.down('sm')]: {
+    fontSize: '1.5rem',
+  },
+}))
+
+const Subtitle = styled(Typography)(({ theme }) => ({
+  fontSize: '1rem',
+  color: theme.palette.text.secondary,
+  fontWeight: 400,
+}))
+
 const ComponentsGrid = styled(Box)(({ theme }) => ({
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+  display: 'flex',
+  flexDirection: 'column',
   gap: theme.spacing(3),
 }))
 
@@ -78,9 +104,14 @@ const ComponentStatusList: React.FC = () => {
 
   return (
     <StyledContainer maxWidth="lg">
-      <Typography variant="h4" component="h1" gutterBottom>
-        Component Status Dashboard
-      </Typography>
+      <TitleSection>
+        <MainTitle>
+          SHIP Status Dashboard
+        </MainTitle>
+        <Subtitle>
+          Real-time monitoring of system components and availability
+        </Subtitle>
+      </TitleSection>
 
       <ComponentsGrid>
         {components.map((component) => (

@@ -11,8 +11,11 @@ const ComponentWell = styled(Card)<{ status: string }>(({ theme, status }) => {
   return {
     backgroundColor: color,
     border: `2px solid ${color}`,
+    borderRadius: theme.spacing(2),
+    transition: 'all 0.2s ease-in-out',
     '&:hover': {
-      boxShadow: theme.shadows[4],
+      boxShadow: theme.shadows[6],
+      transform: 'translateY(-2px)',
     },
   }
 })
@@ -28,11 +31,22 @@ const HeaderBox = styled(Box)(({ theme }) => ({
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  marginBottom: theme.spacing(2),
+  marginBottom: theme.spacing(3),
+  paddingBottom: theme.spacing(2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
+}))
+
+const ComponentTitle = styled(Typography)(({ theme }) => ({
+  fontWeight: 600,
+  fontSize: '1.5rem',
+  color: theme.palette.text.primary,
 }))
 
 const DescriptionTypography = styled(Typography)(({ theme }) => ({
-  marginBottom: theme.spacing(2),
+  marginBottom: theme.spacing(3),
+  fontSize: '1rem',
+  lineHeight: 1.6,
+  color: theme.palette.text.secondary,
 }))
 
 interface ComponentWellProps {
@@ -44,9 +58,9 @@ const ComponentWellComponent: React.FC<ComponentWellProps> = ({ component }) => 
     <ComponentWell status={component.status || 'Unknown'}>
       <CardContent>
         <HeaderBox>
-          <Typography variant="h5" component="h2">
+          <ComponentTitle>
             {component.name}
-          </Typography>
+          </ComponentTitle>
           <StatusChip
             label={component.status || 'Unknown'}
             status={component.status || 'Unknown'}
@@ -54,7 +68,7 @@ const ComponentWellComponent: React.FC<ComponentWellProps> = ({ component }) => 
           />
         </HeaderBox>
 
-        <DescriptionTypography variant="body2" color="text.secondary">
+        <DescriptionTypography>
           {component.description}
         </DescriptionTypography>
 

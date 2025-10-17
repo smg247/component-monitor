@@ -8,22 +8,79 @@ import OutageModal from './OutageModal'
 
 const SubComponentCard = styled(Card)<{ status: string }>(({ theme, status }) => {
   const color = getStatusChipColor(theme, status)
+  
+  // Create a faint version of the status color
+  const getFaintColor = (statusColor: string) => {
+    switch (statusColor) {
+      case theme.palette.success.main:
+        return theme.palette.success.light
+      case theme.palette.error.main:
+        return theme.palette.error.light
+      case theme.palette.warning.main:
+        return theme.palette.warning.light
+      case theme.palette.info.main:
+        return theme.palette.info.light
+      default:
+        return theme.palette.grey[100]
+    }
+  }
 
   return {
     border: `1px solid ${color}`,
+    borderRadius: theme.spacing(1.5),
     cursor: 'pointer',
+    transition: 'all 0.2s ease-in-out',
+    backgroundColor: theme.palette.background.paper,
+    minHeight: '120px',
+    display: 'flex',
+    flexDirection: 'column',
     '&:hover': {
-      boxShadow: theme.shadows[2],
+      boxShadow: theme.shadows[4],
+      transform: 'translateY(-1px)',
+      borderColor: color,
+      backgroundColor: getFaintColor(color),
+      '& .MuiChip-root': {
+        color: 'white',
+        borderColor: 'white',
+      },
     },
   }
 })
 
 const StyledCardContent = styled(CardContent)(({ theme }) => ({
-  padding: theme.spacing(2),
+  padding: theme.spacing(2.5),
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  '&:last-child': {
+    paddingBottom: theme.spacing(2.5),
+  },
+}))
+
+const CardHeader = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  marginBottom: theme.spacing(1),
+}))
+
+const SubComponentTitle = styled(Typography)(({ theme }) => ({
+  fontWeight: 600,
+  fontSize: '1rem',
+  color: theme.palette.text.primary,
+  flex: 1,
+  marginRight: theme.spacing(1),
+}))
+
+const SubComponentDescription = styled(Typography)(({ theme }) => ({
+  fontSize: '0.875rem',
+  color: theme.palette.text.secondary,
+  lineHeight: 1.5,
+  flex: 1,
 }))
 
 const StatusChipBox = styled(Box)(({ theme }) => ({
-  marginTop: theme.spacing(1),
+  flexShrink: 0,
 }))
 
 interface SubComponentCardProps {
@@ -67,20 +124,22 @@ const SubComponentCardComponent: React.FC<SubComponentCardProps> = ({
     <>
       <SubComponentCard status={subComponentWithStatus.status || 'Unknown'} onClick={handleClick}>
         <StyledCardContent>
-          <Typography variant="subtitle2" gutterBottom>
-            {subComponent.name}
-          </Typography>
-          <Typography variant="caption" display="block" color="text.secondary">
+          <CardHeader>
+            <SubComponentTitle>
+              {subComponent.name}
+            </SubComponentTitle>
+            <StatusChipBox>
+              <StatusChip
+                label={loading ? 'Loading...' : subComponentWithStatus.status || 'Unknown'}
+                status={subComponentWithStatus.status || 'Unknown'}
+                size="small"
+                variant="outlined"
+              />
+            </StatusChipBox>
+          </CardHeader>
+          <SubComponentDescription>
             {subComponent.description}
-          </Typography>
-          <StatusChipBox>
-            <StatusChip
-              label={loading ? 'Loading...' : subComponentWithStatus.status || 'Unknown'}
-              status={subComponentWithStatus.status || 'Unknown'}
-              size="small"
-              variant="outlined"
-            />
-          </StatusChipBox>
+          </SubComponentDescription>
         </StyledCardContent>
       </SubComponentCard>
 
