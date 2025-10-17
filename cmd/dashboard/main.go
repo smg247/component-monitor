@@ -18,6 +18,7 @@ type Options struct {
 	ConfigPath  string
 	Port        string
 	DatabaseDSN string
+	CORSOrigin  string
 }
 
 // NewOptions parses command-line flags and returns a new Options instance.
@@ -27,6 +28,7 @@ func NewOptions() *Options {
 	flag.StringVar(&opts.ConfigPath, "config", "", "Path to config file")
 	flag.StringVar(&opts.Port, "port", "8080", "Port to listen on")
 	flag.StringVar(&opts.DatabaseDSN, "dsn", "", "PostgreSQL DSN connection string")
+	flag.StringVar(&opts.CORSOrigin, "cors-origin", "*", "Allowed CORS origin (use '*' for all origins)")
 	flag.Parse()
 
 	return opts
@@ -106,7 +108,7 @@ func main() {
 
 	config := loadConfig(log, opts.ConfigPath)
 	db := connectDatabase(log, opts.DatabaseDSN)
-	server := NewServer(config, db, log)
+	server := NewServer(config, db, log, opts.CORSOrigin)
 
 	addr := ":" + opts.Port
 	if err := server.Start(addr); err != nil {

@@ -5,6 +5,7 @@ import (
 	"ship-status-dash/pkg/types"
 	"time"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -12,21 +13,23 @@ import (
 
 // Server represents the HTTP server for the dashboard API.
 type Server struct {
-	logger   *logrus.Logger
-	config   *types.Config
-	handlers *Handlers
-	db       *gorm.DB
+	logger     *logrus.Logger
+	config     *types.Config
+	handlers   *Handlers
+	db         *gorm.DB
+	corsOrigin string
 }
 
 // NewServer creates a new Server instance with the provided configuration, database connection, and logger.
-func NewServer(config *types.Config, db *gorm.DB, logger *logrus.Logger) *Server {
+func NewServer(config *types.Config, db *gorm.DB, logger *logrus.Logger, corsOrigin string) *Server {
 	handlers := NewHandlers(logger, config, db)
 
 	return &Server{
-		logger:   logger,
-		config:   config,
-		handlers: handlers,
-		db:       db,
+		logger:     logger,
+		config:     config,
+		handlers:   handlers,
+		db:         db,
+		corsOrigin: corsOrigin,
 	}
 }
 
@@ -48,9 +51,17 @@ func (s *Server) setupRoutes() http.Handler {
 	router.HandleFunc("/api/components/{componentName}/{subComponentName}/outages", s.handlers.GetSubComponentOutagesJSON).Methods("GET")
 	router.HandleFunc("/api/components/{componentName}/outages", s.handlers.GetOutagesJSON).Methods("GET")
 
-	router.Use(s.loggingMiddleware)
+	corsHandler := handlers.CORS(
+		handlers.AllowedOrigins([]string{s.corsOrigin}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+		handlers.AllowCredentials(),
+	)(router)
 
-	return router
+	// Add logging middleware
+	handler := s.loggingMiddleware(corsHandler)
+
+	return handler
 }
 
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
