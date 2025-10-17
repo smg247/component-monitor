@@ -70,8 +70,8 @@ func (h *Handlers) validateOutage(outage *types.Outage) (string, bool) {
 	return "", true
 }
 
-// Health returns the health status of the dashboard service.
-func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
+// HealthJSON returns the health status of the dashboard service.
+func (h *Handlers) HealthJSON(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"status": "ok",
 		"time":   time.Now().UTC().Format(time.RFC3339),
@@ -79,13 +79,13 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-// GetComponents returns the list of configured components.
-func (h *Handlers) GetComponents(w http.ResponseWriter, r *http.Request) {
+// GetComponentsJSON returns the list of configured components.
+func (h *Handlers) GetComponentsJSON(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, h.config.Components)
 }
 
-// GetComponentInfo returns the information for a specific component.
-func (h *Handlers) GetComponentInfo(w http.ResponseWriter, r *http.Request) {
+// GetComponentInfoJSON returns the information for a specific component.
+func (h *Handlers) GetComponentInfoJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	component := h.getComponent(componentName)
@@ -96,8 +96,8 @@ func (h *Handlers) GetComponentInfo(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, component)
 }
 
-// GetOutages retrieves outages for a specific component, aggregating sub-component outages for top-level components.
-func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
+// GetOutagesJSON retrieves outages for a specific component, aggregating sub-component outages for top-level components.
+func (h *Handlers) GetOutagesJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 
@@ -123,8 +123,8 @@ func (h *Handlers) GetOutages(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, outages)
 }
 
-// GetSubComponentOutages retrieves outages for a specific sub-component.
-func (h *Handlers) GetSubComponentOutages(w http.ResponseWriter, r *http.Request) {
+// GetSubComponentOutagesJSON retrieves outages for a specific sub-component.
+func (h *Handlers) GetSubComponentOutagesJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
@@ -156,8 +156,8 @@ func (h *Handlers) GetSubComponentOutages(w http.ResponseWriter, r *http.Request
 	respondWithJSON(w, http.StatusOK, outages)
 }
 
-// CreateOutage creates a new outage for a sub-component.
-func (h *Handlers) CreateOutage(w http.ResponseWriter, r *http.Request) {
+// CreateOutageJSON creates a new outage for a sub-component.
+func (h *Handlers) CreateOutageJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
@@ -216,8 +216,8 @@ type UpdateOutageRequest struct {
 	TriageNotes *string    `json:"triage_notes,omitempty"`
 }
 
-// UpdateOutage updates an existing outage with the provided fields.
-func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
+// UpdateOutageJSON updates an existing outage with the provided fields.
+func (h *Handlers) UpdateOutageJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
@@ -302,8 +302,8 @@ func (h *Handlers) UpdateOutage(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, outage)
 }
 
-// GetOutage retrieves a specific outage by ID for a specific sub-component.
-func (h *Handlers) GetOutage(w http.ResponseWriter, r *http.Request) {
+// GetOutageJSON retrieves a specific outage by ID for a specific sub-component.
+func (h *Handlers) GetOutageJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
@@ -388,8 +388,8 @@ func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetSubComponentStatus returns the status of a subcomponent based on active outages
-func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request) {
+// GetSubComponentStatusJSON returns the status of a subcomponent based on active outages
+func (h *Handlers) GetSubComponentStatusJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
@@ -431,8 +431,8 @@ func (h *Handlers) GetSubComponentStatus(w http.ResponseWriter, r *http.Request)
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-// GetComponentStatus returns the status of a component based on active outages in all its sub-components
-func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
+// GetComponentStatusJSON returns the status of a component based on active outages in all its sub-components
+func (h *Handlers) GetComponentStatusJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 
@@ -452,8 +452,8 @@ func (h *Handlers) GetComponentStatus(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, response)
 }
 
-// GetAllComponentsStatus returns the status of all components
-func (h *Handlers) GetAllComponentsStatus(w http.ResponseWriter, r *http.Request) {
+// GetAllComponentsStatusJSON returns the status of all components
+func (h *Handlers) GetAllComponentsStatusJSON(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger
 
 	var allComponentStatuses []types.ComponentStatus
@@ -493,6 +493,7 @@ func (h *Handlers) getComponentStatus(component *types.Component, logger *logrus
 	if len(outages) == 0 {
 		status = types.StatusHealthy
 	} else if len(subComponentsWithOutages) < len(subComponents) {
+		// If there are some sub-components with outages, but not all, the component is partially healthy
 		status = types.StatusPartial
 	} else {
 		status = determineStatusFromSeverity(outages)
@@ -506,6 +507,10 @@ func (h *Handlers) getComponentStatus(component *types.Component, logger *logrus
 }
 
 func determineStatusFromSeverity(outages []types.Outage) types.Status {
+	if len(outages) == 0 {
+		return types.StatusHealthy
+	}
+
 	mostCriticalSeverity := outages[0].Severity
 	highestLevel := types.GetSeverityLevel(mostCriticalSeverity)
 
