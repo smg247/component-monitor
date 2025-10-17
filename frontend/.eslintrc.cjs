@@ -18,12 +18,14 @@ module.exports = {
         version: 'detect',
       },
       'import/resolver': {
-        typescript: {}, // so ESLint can resolve TS paths
+        typescript: {
+          alwaysTryTypes: true,
+          project: './tsconfig.json',
+        },
       },
     },
     plugins: [
       'react',
-      'react-hooks',
       '@typescript-eslint',
       'import',
       'prettier',
@@ -33,7 +35,6 @@ module.exports = {
       'react-app/jest', // CRA's testing rules
       'eslint:recommended',
       'plugin:react/recommended',
-      'plugin:react-hooks/recommended',
       'plugin:@typescript-eslint/recommended',
       'plugin:import/recommended',
       'plugin:import/typescript',
@@ -45,8 +46,7 @@ module.exports = {
       'react/prop-types': 'off', // We use TypeScript types instead
   
       // --- Hooks ---
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+      // react-hooks rules are already included via react-app config
   
       // --- TypeScript Rules ---
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
@@ -72,10 +72,6 @@ module.exports = {
               pattern: 'react',
               group: 'external',
               position: 'before',
-            },
-            {
-              pattern: '@/components/**',
-              group: 'internal',
             },
           ],
           'newlines-between': 'always',
