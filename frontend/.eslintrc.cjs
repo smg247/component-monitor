@@ -1,0 +1,102 @@
+module.exports = {
+    root: true,
+    env: {
+      browser: true,
+      es2021: true,
+      node: true,
+    },
+    parser: '@typescript-eslint/parser',
+    parserOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      ecmaFeatures: {
+        jsx: true,
+      },
+    },
+    settings: {
+      react: {
+        version: 'detect',
+      },
+      'import/resolver': {
+        typescript: {}, // so ESLint can resolve TS paths
+      },
+    },
+    plugins: [
+      'react',
+      'react-hooks',
+      '@typescript-eslint',
+      'import',
+      'prettier',
+    ],
+    extends: [
+      'react-app', // CRA base config
+      'react-app/jest', // CRA's testing rules
+      'eslint:recommended',
+      'plugin:react/recommended',
+      'plugin:react-hooks/recommended',
+      'plugin:@typescript-eslint/recommended',
+      'plugin:import/recommended',
+      'plugin:import/typescript',
+      'plugin:prettier/recommended', // Enables Prettier + shows formatting issues as ESLint errors
+    ],
+    rules: {
+      // --- React Rules ---
+      'react/react-in-jsx-scope': 'off', // Not needed in React 17+
+      'react/prop-types': 'off', // We use TypeScript types instead
+  
+      // --- Hooks ---
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+  
+      // --- TypeScript Rules ---
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/consistent-type-imports': [
+        'warn',
+        { prefer: 'type-imports', disallowTypeAnnotations: false },
+      ],
+  
+      // --- Import Rules ---
+      'import/order': [
+        'warn',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            ['parent', 'sibling', 'index'],
+          ],
+          pathGroups: [
+            {
+              pattern: 'react',
+              group: 'external',
+              position: 'before',
+            },
+            {
+              pattern: '@/components/**',
+              group: 'internal',
+            },
+          ],
+          'newlines-between': 'always',
+          alphabetize: { order: 'asc', caseInsensitive: true },
+        },
+      ],
+      'import/no-unresolved': 'off', // handled by TS
+  
+      // --- Prettier Integration ---
+      'prettier/prettier': [
+        'warn',
+        {
+          endOfLine: 'auto',
+        },
+      ],
+    },
+    ignorePatterns: [
+      'node_modules',
+      'build',
+      'dist',
+      'coverage',
+    ],
+  };
+  
