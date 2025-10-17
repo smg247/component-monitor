@@ -14,3 +14,18 @@ components:
         requires_confirmation: false
     owners:
       - rover_group: "dptp"
+  - name: "Sippy"
+    description: "CI Private Investigator"
+    ship_team: "TRT"
+    slack_channel: "#trt-alert"
+    sub_components:
+      - name: "Sippy"
+        description: "The non-auth variant of Sippy"
+        managed: true
+        requires_confirmation: false
+      - name: "Sippy-Auth"
+        description: "The auth variant of Sippy"
+        managed: true
+        requires_confirmation: false
+    owners:
+      - rover_group: "trt"

@@ -2,7 +2,7 @@ import React from 'react'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { StylesProvider } from '@mui/styles'
 import CssBaseline from '@mui/material/CssBaseline'
-import ComponentStatusList from './ComponentStatusList'
+import ComponentStatusList from './components/ComponentStatusList'
 
 const theme = createTheme()
 

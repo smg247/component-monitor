@@ -1,4 +1,4 @@
-export type Status = 'Healthy' | 'Degraded' | 'Down' | 'Suspected' | 'Partial'
+export type Status = 'Healthy' | 'Degraded' | 'Down' | 'Suspected' | 'Partial' | 'Unknown'
 
 export interface Outage {
   id: number
@@ -16,17 +16,13 @@ export interface Outage {
   auto_resolve: boolean
 }
 
-export interface ComponentStatus {
-  component_name: string
-  status: Status
-  active_outages: Outage[]
-}
-
 export interface SubComponent {
   name: string
   description: string
   managed: boolean
   requires_confirmation: boolean
+  status?: Status
+  active_outages?: Outage[]
 }
 
 export interface Component {
@@ -39,10 +35,5 @@ export interface Component {
     rover_group?: string
     service_account?: string
   }>
-}
-
-export interface SubComponentStatus {
-  component_name: string
-  status: Status
-  active_outages: Outage[]
+  status?: string
 }
