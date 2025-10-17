@@ -1,0 +1,188 @@
+# Frontend Development Rules
+
+## Project Overview
+This is a React TypeScript frontend for the SHIP Status Dashboard, built with Material-UI (MUI) components.
+
+## Technology Stack
+- **Framework**: React 19 with TypeScript
+- **UI Library**: Material-UI (MUI) v7
+- **Styling**: MUI's sx prop and theme system
+- **Code Quality**: ESLint + Prettier
+- **Build Tool**: Create React App (react-scripts)
+
+## Code Style and Standards
+
+### General Rules
+- Use TypeScript for all components and utilities
+- Follow React functional component patterns with hooks
+- Use MUI components for UI elements
+- Prefer composition over inheritance
+- Keep components focused and single-purpose
+
+### Formatting and Code Quality
+- **ALWAYS run Prettier after making changes**: `npx prettier --write .`
+- No semicolons (enforced by ESLint and Prettier)
+- Use single quotes for strings
+- Use trailing commas in objects and arrays
+- Maximum line width: 100 characters
+- Use meaningful variable and function names
+
+### TypeScript Guidelines
+- Define interfaces for all API responses in `src/types.ts`
+- Use proper typing for all props and state
+- Prefer `interface` over `type` for object shapes
+- Use `React.FC` for functional components
+- Import types with `import type` when possible
+
+### React Patterns
+- Use functional components with hooks
+- Prefer `useState` and `useEffect` for state management
+- Use proper dependency arrays in `useEffect`
+- Handle loading and error states explicitly
+- Use proper key props for list items
+- **Use promise chains instead of async/await** for better readability and consistency
+
+### MUI Usage
+- Use MUI's `sx` prop for simple, trivial styling only
+- Use `styled` function for complex or non-trivial CSS styling with theme integration
+- Leverage MUI's theme system for consistent colors and spacing
+- Use MUI components over custom HTML elements
+- Follow MUI's component composition patterns
+- Use `Container`, `Box`, `Typography` for layout
+
+### API Integration
+- Use environment variables for API base URL (`REACT_APP_API_BASE_URL`)
+- Handle API errors gracefully with user-friendly messages
+- Show loading states during API calls
+- Use proper HTTP status code handling
+
+### File Organization
+- Keep components in `src/` directory
+- Use descriptive file names (e.g., `ComponentStatusList.tsx`)
+- Export components as default exports
+- Keep types in `src/types.ts`
+- Use index files sparingly
+
+## Development Workflow
+
+### Before Making Changes
+1. Ensure you're in the frontend directory: `cd frontend`
+2. Check current linting status: `npm run lint`
+
+### After Making Changes
+1. **MANDATORY**: Run Prettier to format code: `npx prettier --write .`
+2. Check for linting errors: `npm run lint`
+3. Fix any ESLint errors before committing
+4. Test the changes in the browser
+
+### Running the Application
+- Development server: `npm start`
+- Build for production: `npm run build`
+- Run tests: `npm test`
+- Lint code: `npm run lint`
+
+### Environment Configuration
+- Create `.env.development` with `REACT_APP_API_BASE_URL=http://localhost:8090`
+- Environment variables must start with `REACT_APP_` to be accessible in the app
+
+### Theme Integration Setup
+- Wrap app with `StylesProvider` and `ThemeProvider` for proper theme integration
+- Use `styled` function for complex styling with full theme access
+- Theme properties like `theme.spacing()`, `theme.palette`, etc. work correctly
+
+## Common Patterns
+
+### API Calls
+```typescript
+const [data, setData] = useState<DataType[]>([])
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+useEffect(() => {
+  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || ''
+  
+  fetch(`${apiBaseUrl}/api/endpoint`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      return response.json()
+    })
+    .then(result => {
+      setData(result)
+    })
+    .catch(err => {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+    })
+    .finally(() => {
+      setLoading(false)
+    })
+}, [])
+```
+
+### MUI Component Structure
+```typescript
+import React from 'react'
+import { Box, Typography, Card, CardContent, styled } from '@mui/material'
+
+const StyledBox = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2),
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: theme.shape.borderRadius,
+}))
+
+const StyledTypography = styled(Typography)(({ theme }) => ({
+  marginBottom: theme.spacing(2),
+  color: theme.palette.primary.main,
+}))
+
+const StyledCard = styled(Card)(({ theme }) => ({
+  boxShadow: theme.shadows[3],
+  '&:hover': {
+    boxShadow: theme.shadows[6],
+  },
+}))
+
+const MyComponent: React.FC = () => {
+  return (
+    <StyledBox>
+      <StyledTypography variant="h4" component="h1">
+        Title
+      </StyledTypography>
+      <StyledCard>
+        <CardContent>
+          Content here
+        </CardContent>
+      </StyledCard>
+    </StyledBox>
+  )
+}
+
+export default MyComponent
+```
+
+### Simple Styling with sx prop
+```typescript
+import React from 'react'
+import { Box, Typography } from '@mui/material'
+
+const SimpleComponent: React.FC = () => {
+  return (
+    <Box sx={{ p: 2, mb: 1 }}>
+      <Typography variant="h6" sx={{ color: 'primary.main' }}>
+        Simple Title
+      </Typography>
+    </Box>
+  )
+}
+
+export default SimpleComponent
+```
+
+## Important Notes
+- Always run Prettier after making changes
+- Use MUI components instead of custom CSS
+- Handle loading and error states in all API calls
+- Keep components small and focused
+- Use proper TypeScript typing throughout
+- Test changes in the browser before considering work complete

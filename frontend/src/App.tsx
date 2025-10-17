@@ -1,26 +1,19 @@
 import React from 'react'
+import { ThemeProvider, createTheme } from '@mui/material/styles'
+import { StylesProvider } from '@mui/styles'
+import CssBaseline from '@mui/material/CssBaseline'
+import ComponentStatusList from './ComponentStatusList'
 
-import './App.css'
-import logo from './logo.svg'
+const theme = createTheme()
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <StylesProvider injectFirst>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <ComponentStatusList />
+      </ThemeProvider>
+    </StylesProvider>
   )
 }
 
